@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +17,8 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import DotGrid from "@/components/DotGrid";
+import { useAuth } from "@/lib/auth-context";
+import { UserMenu } from "@/components/UserMenu";
 
 export default function LandingPage() {
   const [query, setQuery] = useState('');
@@ -23,6 +26,7 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
 
   const handleSearch = async () => {
     setLoading(true);
@@ -65,12 +69,15 @@ export default function LandingPage() {
                 <p className="text-sm text-gray-600">AI-Powered Biomedical Literature Platform</p>
               </div>
             </div>
-            <Button 
-              variant="ghost" 
-              className="text-blue-600 hover:text-blue-700 hover:bg-gray-50 font-normal"
-            >
-              Log in
-            </Button>
+            {authLoading ? (
+              <div className="w-20 h-9 bg-gray-100 animate-pulse rounded"></div>
+            ) : user ? (
+              <UserMenu />
+            ) : (
+              <Button asChild variant="ghost" className="text-blue-600 hover:text-blue-700 hover:bg-gray-50 font-normal">
+                <Link href="/auth/login">Log in</Link>
+              </Button>
+            )}
           </div>
         </div>
       </header>
