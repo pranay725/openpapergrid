@@ -64,6 +64,7 @@ export async function GET(request: Request) {
   const textAvailability = searchParams.get('textAvailability');
   const journals = searchParams.get('journals');
   const page = parseInt(searchParams.get('page') || '1');
+  const sort = searchParams.get('sort') || 'relevance_score:desc';
 
   if (!query) {
     return NextResponse.json({ error: 'Query parameter is required' }, { status: 400 });
@@ -121,7 +122,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const worksParams = new URLSearchParams({ filter, per_page: '25', page: page.toString() });
+  const worksParams = new URLSearchParams({ filter, per_page: '25', page: page.toString(), sort });
   const worksUrl = `https://api.openalex.org/works?${worksParams.toString()}`;
 
   // Create multiple group_by queries for different facets

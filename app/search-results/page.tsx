@@ -46,12 +46,14 @@ export default function SearchResultsPage() {
   const initialTextAvailability = searchParams.get('textAvailability')?.split('|') || [];
   const initialJournals = searchParams.get('journals')?.split('|') || [];
   const initialPage = parseInt(searchParams.get('page') || '1');
+  const initialSort = searchParams.get('sort') || 'relevance_score:desc';
 
   const [query, setQuery] = useState(initialQuery);
   const [selectedYear, setSelectedYear] = useState<string[]>(initialYear);
   const [results, setResults] = useState<any[] | null>(null);
   const [totalResults, setTotalResults] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(initialPage);
+  const [sortBy, setSortBy] = useState<string>(initialSort);
   const [yearBreakdown, setYearBreakdown] = useState<any[] | null>(null);
   const [typeBreakdown, setTypeBreakdown] = useState<any[] | null>(null);
   const [topicBreakdown, setTopicBreakdown] = useState<any[] | null>(null);
@@ -121,14 +123,15 @@ export default function SearchResultsPage() {
     authors: string[] = [],
     journals: string[] = [],
     textAvail: string[] = [],
-    page: number = 1
+    page: number = 1,
+    sort: string = 'relevance_score:desc'
   ) => {
     if (!searchQuery) return;
 
     setLoading(true);
     setError(null);
     try {
-      let apiUrl = `/api/search?query=${encodeURIComponent(searchQuery)}&page=${page}`;
+      let apiUrl = `/api/search?query=${encodeURIComponent(searchQuery)}&page=${page}&sort=${encodeURIComponent(sort)}`;
       if (yearFilters.length > 0) {
         apiUrl += `&year=${yearFilters.join('|')}`;
       }
@@ -180,7 +183,7 @@ export default function SearchResultsPage() {
   }, []);
 
   useEffect(() => {
-    fetchResults(initialQuery, initialYear, false, [], [], [], initialCountries, initialAuthors, initialJournals, initialTextAvailability, initialPage);
+    fetchResults(initialQuery, initialYear, false, [], [], [], initialCountries, initialAuthors, initialJournals, initialTextAvailability, initialPage, initialSort);
   }, []); // Remove dependencies to prevent re-renders
 
   const handleSearch = () => {
@@ -242,7 +245,8 @@ export default function SearchResultsPage() {
     authors: string[] = [],
     journals: string[] = [],
     textAvail: string[] = [],
-    page: number = 1
+    page: number = 1,
+    sort: string = sortBy
   ) => {
     const newQuery = query.trim();
     if (newQuery) {
@@ -250,6 +254,9 @@ export default function SearchResultsPage() {
       let url = `/search-results?query=${encodeURIComponent(newQuery)}`;
       if (page > 1) {
         url += `&page=${page}`;
+      }
+      if (sort !== 'relevance_score:desc') {
+        url += `&sort=${encodeURIComponent(sort)}`;
       }
       if (years.length > 0) {
         url += `&year=${years.join('|')}`;
@@ -281,7 +288,7 @@ export default function SearchResultsPage() {
       window.history.pushState({}, '', url);
       
       // Fetch results with new filters
-      fetchResults(newQuery, years, openAccess, topics, institutions, types, countries, authors, journals, textAvail, page);
+      fetchResults(newQuery, years, openAccess, topics, institutions, types, countries, authors, journals, textAvail, page, sort);
     }
   };
 
@@ -308,13 +315,14 @@ export default function SearchResultsPage() {
     setPendingTextAvailability([]);
     setPendingDateRange('');
     
-    // Reset page
+    // Reset page and sort
     setCurrentPage(1);
+    setSortBy('relevance_score:desc');
     
     const newQuery = query.trim();
     if (newQuery) {
       window.history.pushState({}, '', `/search-results?query=${encodeURIComponent(newQuery)}`);
-      fetchResults(newQuery, [], false, [], [], [], [], [], [], [], 1);
+      fetchResults(newQuery, [], false, [], [], [], [], [], [], [], 1, 'relevance_score:desc');
     }
   };
   
@@ -395,6 +403,24 @@ export default function SearchResultsPage() {
       selectedJournals,
       textAvailability,
       newPage
+    );
+  };
+
+  const handleSortChange = (newSort: string) => {
+    setSortBy(newSort);
+    setCurrentPage(1); // Reset to first page when changing sort
+    updateFiltersAndFetch(
+      selectedYear,
+      false,
+      selectedTopics,
+      selectedInstitutions,
+      selectedTypes,
+      selectedCountries,
+      selectedAuthors,
+      selectedJournals,
+      textAvailability,
+      1,
+      newSort
     );
   };
 
@@ -1433,8 +1459,26 @@ export default function SearchResultsPage() {
                   
                   {/* Results Header */}
                   <div className="mb-4 flex items-center justify-between">
-                    <div className="text-sm text-gray-600">
-                      {totalResults.toLocaleString()} results
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm text-gray-600">
+                        {totalResults.toLocaleString()} results
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Sort by:</span>
+                        <select
+                          value={sortBy}
+                          onChange={(e) => handleSortChange(e.target.value)}
+                          className="text-sm border border-gray-300 rounded px-3 py-1 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="relevance_score:desc">Best Match</option>
+                          <option value="publication_date:desc">Most Recent</option>
+                          <option value="publication_date:asc">Oldest First</option>
+                          <option value="cited_by_count:desc">Most Cited</option>
+                          <option value="cited_by_count:asc">Least Cited</option>
+                          <option value="display_name:asc">Title (A-Z)</option>
+                          <option value="display_name:desc">Title (Z-A)</option>
+                        </select>
+                      </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
