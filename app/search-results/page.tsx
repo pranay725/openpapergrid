@@ -35,6 +35,68 @@ const deconstructAbstract = (invertedIndex: Record<string, number[]>) => {
   return wordPositions.map(wp => wp.word).join(' ');
 };
 
+// Skeleton loader components
+const FilterSkeleton = () => (
+  <div className="bg-white border border-gray-200 rounded-lg shadow-sm animate-pulse">
+    {[1, 2, 3, 4, 5, 6].map((i) => (
+      <div key={i} className="border-b p-4">
+        <div className="h-4 bg-gray-200 rounded w-24 mb-3"></div>
+        <div className="space-y-2">
+          <div className="h-3 bg-gray-200 rounded w-full"></div>
+          <div className="h-3 bg-gray-200 rounded w-4/5"></div>
+          <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const ResultSkeleton = () => (
+  <div className="border-b border-gray-200 py-4 animate-pulse">
+    <div className="flex gap-4">
+      <div className="flex-shrink-0 w-8">
+        <div className="h-4 bg-gray-200 rounded w-6"></div>
+      </div>
+      <div className="flex-1">
+        <div className="mb-2">
+          <div className="h-5 bg-gray-300 rounded w-3/4"></div>
+        </div>
+        <div className="mb-2">
+          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+        </div>
+        <div className="space-y-1">
+          <div className="h-3 bg-gray-200 rounded w-full"></div>
+          <div className="h-3 bg-gray-200 rounded w-5/6"></div>
+        </div>
+        <div className="mt-2 flex gap-4">
+          <div className="h-3 bg-gray-200 rounded w-20"></div>
+          <div className="h-3 bg-gray-200 rounded w-24"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const HeaderSkeleton = () => (
+  <div className="mb-4 flex items-center justify-between animate-pulse">
+    <div className="flex items-center gap-4">
+      <div className="h-4 bg-gray-200 rounded w-24"></div>
+      <div className="flex items-center gap-2">
+        <div className="h-4 bg-gray-200 rounded w-16"></div>
+        <div className="h-8 bg-gray-200 rounded w-32"></div>
+      </div>
+    </div>
+    <div className="flex items-center gap-2">
+      <div className="h-8 bg-gray-200 rounded w-8"></div>
+      <div className="h-4 bg-gray-200 rounded w-12"></div>
+      <div className="h-8 bg-gray-200 rounded w-12"></div>
+      <div className="h-4 bg-gray-200 rounded w-12"></div>
+      <div className="h-8 bg-gray-200 rounded w-8"></div>
+      <div className="h-8 bg-gray-200 rounded w-8"></div>
+    </div>
+  </div>
+);
+
 export default function SearchResultsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -521,11 +583,6 @@ export default function SearchResultsPage() {
       {/* Search Results Display Section */}
       <section className="w-full px-4 py-8">
         <div className="max-w-7xl mx-auto">
-          {loading && (
-            <div className="flex items-center justify-center h-64 text-gray-600">
-              <p>Loading results...</p>
-            </div>
-          )}
           {error && (
             <div className="flex items-center justify-center h-64 text-red-600">
               <p>Error: {error}</p>
@@ -536,14 +593,13 @@ export default function SearchResultsPage() {
               <p>No results found for your query.</p>
             </div>
           )}
-          {results && results.length > 0 && (
+          {(loading || (results && results.length > 0)) && (
             <div className="flex gap-6">
                 <div className="w-80 flex-shrink-0">
                   <div className="sticky top-4">
-
                     
                     {/* Apply/Reset Filters Bar */}
-                    {(getPendingFiltersCount() > 0 || getActiveFiltersCount() > 0) && (
+                    {!loading && (getPendingFiltersCount() > 0 || getActiveFiltersCount() > 0) && (
                       <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium text-blue-900">
@@ -587,7 +643,10 @@ export default function SearchResultsPage() {
                     )}
                     
                     {/* Filters */}
-                    <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+                    {loading ? (
+                      <FilterSkeleton />
+                    ) : (
+                      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
                         
                         {/* Year Filter */}
                         <div className="border-b relative">
@@ -1394,7 +1453,8 @@ export default function SearchResultsPage() {
                             </div>
                           )}
                         </div>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex-1">
@@ -1458,7 +1518,10 @@ export default function SearchResultsPage() {
                   )}
                   
                   {/* Results Header */}
-                  <div className="mb-4 flex items-center justify-between">
+                  {loading ? (
+                    <HeaderSkeleton />
+                  ) : (
+                    <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="text-sm text-gray-600">
                         {totalResults.toLocaleString()} results
@@ -1521,10 +1584,18 @@ export default function SearchResultsPage() {
                       </div>
                     </div>
                   </div>
+                  )}
                   
                   {/* Results List */}
-                  <div className="space-y-0 border-t">
-                    {results.map((result: any, index: number) => (
+                  {loading ? (
+                    <div className="space-y-0 border-t">
+                      {[...Array(10)].map((_, i) => (
+                        <ResultSkeleton key={i} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-0 border-t">
+                    {results && results.map((result: any, index: number) => (
                       <div key={result.id} className="border-b border-gray-200 py-4">
                         <div className="flex gap-4">
                           <div className="flex-shrink-0 text-sm text-gray-500 w-8 text-right">
@@ -1583,6 +1654,7 @@ export default function SearchResultsPage() {
                       </div>
                     ))}
                   </div>
+                  )}
                 </div>
               </div>
             )}
