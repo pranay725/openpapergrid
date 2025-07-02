@@ -15,6 +15,7 @@ import {
   DatabaseIcon,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { Header } from "@/components/Header";
 import DotGrid from "@/components/DotGrid";
 
 export default function LandingPage() {
@@ -29,35 +30,7 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-screen w-full bg-white text-gray-900 font-sans">
-      {/* US Gov Banner */}
-      <div className="bg-gray-100 text-xs py-1 px-4 border-b border-gray-300">
-        <div className="max-w-7xl mx-auto flex items-center gap-2">
-          <span className="text-gray-600">🇺🇸</span>
-          <span>An open-source alternative to AI research platforms like Elicit, Consensus, Scite.</span>
-          <a href="#" className="text-blue-600 hover:underline ml-2">Here's how you deploy →</a>
-        </div>
-      </div>
-
-      {/* NIH/NLM Style Header */}
-      <header className="bg-white border-b border-gray-300">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-8">
-              <Logo />
-              <div>
-                <h1 className="text-2xl font-normal text-gray-900">OpenPaper Grid</h1>
-                <p className="text-sm text-gray-600">AI-Powered Biomedical Literature Platform</p>
-              </div>
-            </div>
-            <Button 
-              variant="ghost" 
-              className="text-blue-600 hover:text-blue-700 hover:bg-gray-50 font-normal"
-            >
-              Log in
-            </Button>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* PubMed Style Hero/Search Section */}
       <section className="relative bg-gradient-to-b from-blue-600 to-blue-700 text-white min-h-[400px] flex items-center overflow-hidden">
