@@ -45,11 +45,13 @@ export default function SearchResultsPage() {
   const initialAuthors = searchParams.get('authors')?.split('|') || [];
   const initialTextAvailability = searchParams.get('textAvailability')?.split('|') || [];
   const initialJournals = searchParams.get('journals')?.split('|') || [];
+  const initialPage = parseInt(searchParams.get('page') || '1');
 
   const [query, setQuery] = useState(initialQuery);
   const [selectedYear, setSelectedYear] = useState<string[]>(initialYear);
   const [results, setResults] = useState<any[] | null>(null);
   const [totalResults, setTotalResults] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(initialPage);
   const [yearBreakdown, setYearBreakdown] = useState<any[] | null>(null);
   const [typeBreakdown, setTypeBreakdown] = useState<any[] | null>(null);
   const [topicBreakdown, setTopicBreakdown] = useState<any[] | null>(null);
@@ -118,14 +120,15 @@ export default function SearchResultsPage() {
     countries: string[] = [],
     authors: string[] = [],
     journals: string[] = [],
-    textAvail: string[] = []
+    textAvail: string[] = [],
+    page: number = 1
   ) => {
     if (!searchQuery) return;
 
     setLoading(true);
     setError(null);
     try {
-      let apiUrl = `/api/search?query=${encodeURIComponent(searchQuery)}`;
+      let apiUrl = `/api/search?query=${encodeURIComponent(searchQuery)}&page=${page}`;
       if (yearFilters.length > 0) {
         apiUrl += `&year=${yearFilters.join('|')}`;
       }
@@ -177,14 +180,15 @@ export default function SearchResultsPage() {
   }, []);
 
   useEffect(() => {
-    fetchResults(initialQuery, initialYear, false, [], [], [], initialCountries, initialAuthors, initialJournals, initialTextAvailability);
+    fetchResults(initialQuery, initialYear, false, [], [], [], initialCountries, initialAuthors, initialJournals, initialTextAvailability, initialPage);
   }, []); // Remove dependencies to prevent re-renders
 
   const handleSearch = () => {
     const newQuery = query.trim();
     if (newQuery) {
-      // Keep existing filters when performing a new search
-      updateFiltersAndFetch(selectedYear, false, selectedTopics, selectedInstitutions, selectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability);
+      // Keep existing filters when performing a new search but reset to page 1
+      setCurrentPage(1);
+      updateFiltersAndFetch(selectedYear, false, selectedTopics, selectedInstitutions, selectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability, 1);
     }
   };
 
@@ -194,7 +198,8 @@ export default function SearchResultsPage() {
       : [...selectedYear, year];
     
     setSelectedYear(newSelectedYears);
-    updateFiltersAndFetch(newSelectedYears, false, selectedTopics, selectedInstitutions, selectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability);
+    setCurrentPage(1);
+    updateFiltersAndFetch(newSelectedYears, false, selectedTopics, selectedInstitutions, selectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability, 1);
   };
   
   const handleTypeFilter = (type: string) => {
@@ -203,7 +208,8 @@ export default function SearchResultsPage() {
       : [...selectedTypes, type];
     
     setSelectedTypes(newSelectedTypes);
-    updateFiltersAndFetch(selectedYear, false, selectedTopics, selectedInstitutions, newSelectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability);
+    setCurrentPage(1);
+    updateFiltersAndFetch(selectedYear, false, selectedTopics, selectedInstitutions, newSelectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability, 1);
   };
   
   const handleTopicFilter = (topic: string) => {
@@ -212,7 +218,8 @@ export default function SearchResultsPage() {
       : [...selectedTopics, topic];
     
     setSelectedTopics(newSelectedTopics);
-    updateFiltersAndFetch(selectedYear, false, newSelectedTopics, selectedInstitutions, selectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability);
+    setCurrentPage(1);
+    updateFiltersAndFetch(selectedYear, false, newSelectedTopics, selectedInstitutions, selectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability, 1);
   };
   
   const handleInstitutionFilter = (institution: string) => {
@@ -221,7 +228,8 @@ export default function SearchResultsPage() {
       : [...selectedInstitutions, institution];
     
     setSelectedInstitutions(newSelectedInstitutions);
-    updateFiltersAndFetch(selectedYear, false, selectedTopics, newSelectedInstitutions, selectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability);
+    setCurrentPage(1);
+    updateFiltersAndFetch(selectedYear, false, selectedTopics, newSelectedInstitutions, selectedTypes, selectedCountries, selectedAuthors, selectedJournals, textAvailability, 1);
   };
   
   const updateFiltersAndFetch = (
@@ -233,12 +241,16 @@ export default function SearchResultsPage() {
     countries: string[] = [],
     authors: string[] = [],
     journals: string[] = [],
-    textAvail: string[] = []
+    textAvail: string[] = [],
+    page: number = 1
   ) => {
     const newQuery = query.trim();
     if (newQuery) {
       // Update URL without navigation
       let url = `/search-results?query=${encodeURIComponent(newQuery)}`;
+      if (page > 1) {
+        url += `&page=${page}`;
+      }
       if (years.length > 0) {
         url += `&year=${years.join('|')}`;
       }
@@ -269,7 +281,7 @@ export default function SearchResultsPage() {
       window.history.pushState({}, '', url);
       
       // Fetch results with new filters
-      fetchResults(newQuery, years, openAccess, topics, institutions, types, countries, authors, journals, textAvail);
+      fetchResults(newQuery, years, openAccess, topics, institutions, types, countries, authors, journals, textAvail, page);
     }
   };
 
@@ -296,10 +308,13 @@ export default function SearchResultsPage() {
     setPendingTextAvailability([]);
     setPendingDateRange('');
     
+    // Reset page
+    setCurrentPage(1);
+    
     const newQuery = query.trim();
     if (newQuery) {
       window.history.pushState({}, '', `/search-results?query=${encodeURIComponent(newQuery)}`);
-      fetchResults(newQuery, [], false, [], [], [], [], [], [], []);
+      fetchResults(newQuery, [], false, [], [], [], [], [], [], [], 1);
     }
   };
   
@@ -336,6 +351,9 @@ export default function SearchResultsPage() {
     setTextAvailability(pendingTextAvailability);
     setDateRange(pendingDateRange);
     
+    // Reset to page 1 when applying filters
+    setCurrentPage(1);
+    
     // Update URL and fetch
     updateFiltersAndFetch(
       pendingYear,
@@ -346,7 +364,8 @@ export default function SearchResultsPage() {
       pendingCountries,
       pendingAuthors,
       pendingJournals,
-      pendingTextAvailability
+      pendingTextAvailability,
+      1
     );
   };
   
@@ -362,6 +381,24 @@ export default function SearchResultsPage() {
     setPendingTextAvailability([]);
     setPendingDateRange('');
   };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    updateFiltersAndFetch(
+      selectedYear,
+      false,
+      selectedTopics,
+      selectedInstitutions,
+      selectedTypes,
+      selectedCountries,
+      selectedAuthors,
+      selectedJournals,
+      textAvailability,
+      newPage
+    );
+  };
+
+  const totalPages = Math.ceil(totalResults / 25);
 
   return (
     <main className="min-h-screen w-full bg-white text-gray-900 font-sans">
@@ -1401,22 +1438,39 @@ export default function SearchResultsPage() {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
-                        <button className="p-1 hover:bg-gray-200 rounded" disabled>
-                          <ChevronLeftIcon className="h-4 w-4 text-gray-400" />
+                        <button 
+                          className="p-1 hover:bg-gray-200 rounded" 
+                          disabled={currentPage === 1}
+                          onClick={() => handlePageChange(currentPage - 1)}
+                        >
+                          <ChevronLeftIcon className={`h-4 w-4 ${currentPage === 1 ? 'text-gray-400' : 'text-gray-600'}`} />
                         </button>
                         <span className="text-sm">Page</span>
                         <input
                           type="text"
-                          value="1"
+                          value={currentPage}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value);
+                            if (value > 0 && value <= totalPages) {
+                              handlePageChange(value);
+                            }
+                          }}
                           className="w-12 px-2 py-1 text-sm border border-gray-300 rounded text-center"
-                          readOnly
                         />
-                        <span className="text-sm">of {Math.ceil(totalResults / 25)}</span>
-                        <button className="p-1 hover:bg-gray-200 rounded">
-                          <ChevronRightIcon className="h-4 w-4" />
+                        <span className="text-sm">of {totalPages}</span>
+                        <button 
+                          className="p-1 hover:bg-gray-200 rounded"
+                          disabled={currentPage === totalPages}
+                          onClick={() => handlePageChange(currentPage + 1)}
+                        >
+                          <ChevronRightIcon className={`h-4 w-4 ${currentPage === totalPages ? 'text-gray-400' : 'text-gray-600'}`} />
                         </button>
-                        <button className="p-1 hover:bg-gray-200 rounded ml-2">
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <button 
+                          className="p-1 hover:bg-gray-200 rounded ml-2"
+                          disabled={currentPage === totalPages}
+                          onClick={() => handlePageChange(totalPages)}
+                        >
+                          <svg className={`h-4 w-4 ${currentPage === totalPages ? 'text-gray-400' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                           </svg>
                         </button>
@@ -1430,7 +1484,7 @@ export default function SearchResultsPage() {
                       <div key={result.id} className="border-b border-gray-200 py-4">
                         <div className="flex gap-4">
                           <div className="flex-shrink-0 text-sm text-gray-500 w-8 text-right">
-                            {index + 1}
+                            {(currentPage - 1) * 25 + index + 1}
                           </div>
                           <div className="flex-1">
                             <div className="mb-1">
