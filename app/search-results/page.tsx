@@ -84,11 +84,11 @@ export default function SearchResultsPage() {
   
   // Show more states for filter lists
   const [showMoreState, setShowMoreState] = useState<Record<string, number>>({
-    topic: 20,
-    institution: 20,
-    country: 20,
-    author: 20,
-    journal: 20,
+    topic: 200,
+    institution: 200,
+    country: 200,
+    author: 200,
+    journal: 200,
   });
   
   // Search input states for filters
@@ -880,7 +880,7 @@ export default function SearchResultsPage() {
                               </div>
                               {topicBreakdown.length > showMoreState.topic && (
                                 <button
-                                  onClick={() => setShowMoreState({...showMoreState, topic: showMoreState.topic + 20})}
+                                  onClick={() => setShowMoreState({...showMoreState, topic: showMoreState.topic + 50})}
                                   className="text-xs text-blue-600 hover:text-blue-700 mt-2"
                                 >
                                   Show more ({topicBreakdown.length - showMoreState.topic} more)
@@ -980,7 +980,7 @@ export default function SearchResultsPage() {
                                 
                                 return filtered.length > itemsToShow && (
                                   <button
-                                    onClick={() => setShowMoreState({...showMoreState, institution: showMoreState.institution + 20})}
+                                    onClick={() => setShowMoreState({...showMoreState, institution: showMoreState.institution + 50})}
                                     className="text-xs text-blue-600 hover:text-blue-700 mt-2"
                                   >
                                     Show more ({filtered.length - itemsToShow} more)
@@ -1054,7 +1054,7 @@ export default function SearchResultsPage() {
                               </div>
                               {countryBreakdown.length > showMoreState.country && (
                                 <button
-                                  onClick={() => setShowMoreState({...showMoreState, country: showMoreState.country + 20})}
+                                  onClick={() => setShowMoreState({...showMoreState, country: showMoreState.country + 50})}
                                   className="text-xs text-blue-600 hover:text-blue-700 mt-2"
                                 >
                                   Show more ({countryBreakdown.length - showMoreState.country} more)
@@ -1154,7 +1154,7 @@ export default function SearchResultsPage() {
                                 
                                 return filtered.length > itemsToShow && (
                                   <button
-                                    onClick={() => setShowMoreState({...showMoreState, author: showMoreState.author + 20})}
+                                    onClick={() => setShowMoreState({...showMoreState, author: showMoreState.author + 50})}
                                     className="text-xs text-blue-600 hover:text-blue-700 mt-2"
                                   >
                                     Show more ({filtered.length - itemsToShow} more)
@@ -1255,7 +1255,7 @@ export default function SearchResultsPage() {
                                 
                                 return filtered.length > itemsToShow && (
                                   <button
-                                    onClick={() => setShowMoreState({...showMoreState, journal: showMoreState.journal + 20})}
+                                    onClick={() => setShowMoreState({...showMoreState, journal: showMoreState.journal + 50})}
                                     className="text-xs text-blue-600 hover:text-blue-700 mt-2"
                                   >
                                     Show more ({filtered.length - itemsToShow} more)
