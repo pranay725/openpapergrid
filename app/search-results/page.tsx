@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   SearchIcon,
   FileTextIcon,
@@ -458,38 +457,27 @@ export default function SearchResultsPage() {
 
       {/* Search Results Display Section */}
       <section className="w-full px-4 py-8">
-        <Card className="shadow-lg">
-          <CardContent className="p-6 min-h-[300px]">
-            {loading && (
-              <div className="flex items-center justify-center h-full text-gray-600">
-                <p>Loading results...</p>
-              </div>
-            )}
-            {error && (
-              <div className="flex items-center justify-center h-full text-red-600">
-                <p>Error: {error}</p>
-              </div>
-            )}
-            {results && results.length === 0 && !loading && !error && (
-              <div className="flex items-center justify-center h-full text-gray-600">
-                <p>No results found for your query.</p>
-              </div>
-            )}
-            {results && results.length > 0 && (
-              <div className="flex gap-6">
+        <div className="max-w-7xl mx-auto">
+          {loading && (
+            <div className="flex items-center justify-center h-64 text-gray-600">
+              <p>Loading results...</p>
+            </div>
+          )}
+          {error && (
+            <div className="flex items-center justify-center h-64 text-red-600">
+              <p>Error: {error}</p>
+            </div>
+          )}
+          {results && results.length === 0 && !loading && !error && (
+            <div className="flex items-center justify-center h-64 text-gray-600">
+              <p>No results found for your query.</p>
+            </div>
+          )}
+          {results && results.length > 0 && (
+            <div className="flex gap-6">
                 <div className="w-80 flex-shrink-0">
                   <div className="sticky top-4">
-                    {/* Custom Filters Section */}
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-700">MY CUSTOM FILTERS</span>
-                        <button className="p-1 hover:bg-gray-200 rounded" title="Manage filters">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
+
                     
                     {/* Apply/Reset Filters Bar */}
                     {(getPendingFiltersCount() > 0 || getActiveFiltersCount() > 0) && (
@@ -535,9 +523,8 @@ export default function SearchResultsPage() {
                       </div>
                     )}
                     
-                    {/* Filters Card */}
-                    <Card className="shadow-sm border-gray-200">
-                      <CardContent className="p-0">
+                    {/* Filters */}
+                    <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
                         
                         {/* Year Filter */}
                         <div className="border-b relative">
@@ -1271,9 +1258,22 @@ export default function SearchResultsPage() {
                           {JSON.stringify(pendingTypes.sort()) !== JSON.stringify(selectedTypes.sort()) && (
                             <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-400"></div>
                           )}
-                          <div className="px-4 py-3">
-                            <h5 className="text-xs font-medium text-gray-700 mb-3">ARTICLE TYPE</h5>
-                            {typeBreakdown && typeBreakdown.length > 0 && (
+                          <button
+                            onClick={() => toggleSection('type')}
+                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                          >
+                            <span className="font-medium text-sm">Article Type</span>
+                            <div className="flex items-center gap-2">
+                              {pendingTypes.length > 0 && (
+                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                  {pendingTypes.length}
+                                </span>
+                              )}
+                              {expandedSections.type ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
+                            </div>
+                          </button>
+                          {expandedSections.type && typeBreakdown && typeBreakdown.length > 0 && (
+                            <div className="px-4 pb-4">
                               <div className="space-y-1 max-h-60 overflow-y-auto pr-2 -mr-2">
                                 {typeBreakdown.map((item: any) => {
                                   const typeLabels: Record<string, string> = {
@@ -1328,11 +1328,10 @@ export default function SearchResultsPage() {
                                   );
                                 })}
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
-                      </CardContent>
-                    </Card>
+                    </div>
                   </div>
                 </div>
                 <div className="flex-1">
@@ -1489,8 +1488,7 @@ export default function SearchResultsPage() {
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
       </section>
 
       {/* Footer */}
