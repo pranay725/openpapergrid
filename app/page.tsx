@@ -19,27 +19,11 @@ import DotGrid from "@/components/DotGrid";
 
 export default function LandingPage() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const handleSearch = async () => {
-    setLoading(true);
-    setError(null);
-    setResults(null);
-    try {
-      const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Something went wrong');
-      }
-      const data = await response.json();
-      setResults(data.results || []);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  const handleSearch = () => {
+    if (query.trim()) {
+      router.push(`/search-results?query=${encodeURIComponent(query)}`);
     }
   };
 
@@ -123,9 +107,8 @@ export default function LandingPage() {
                   size="lg" 
                   className="rounded-none rounded-r bg-blue-600 hover:bg-blue-700 text-white px-6 font-normal"
                   onClick={handleSearch} 
-                  disabled={loading}
                 >
-                  {loading ? 'Searching...' : 'Search'}
+                  Search
                 </Button>
               </div>
             </div>
@@ -136,81 +119,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Search Results Section - PubMed Style */}
-      {(results || loading || error) && (
-        <section className="max-w-7xl mx-auto px-4 py-6">
-          <div className="bg-white">
-            {loading && (
-              <div className="text-center py-8 text-gray-600">
-                <p>Loading results...</p>
-              </div>
-            )}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded p-4 text-red-700">
-                <p>Error: {error}</p>
-              </div>
-            )}
-            {results && results.length === 0 && !loading && !error && (
-              <div className="text-center py-8 text-gray-600">
-                <p>No results found for your query.</p>
-              </div>
-            )}
-            {results && results.length > 0 && (
-              <div>
-                <div className="border-b border-gray-300 pb-3 mb-4">
-                  <h3 className="text-lg font-normal text-gray-700">
-                    Results: <span className="font-semibold">{results.length}</span>
-                  </h3>
-                </div>
-                <div className="space-y-4">
-                  {results.map((result: any, index: number) => (
-                    <div key={result.id} className="border-b border-gray-200 pb-4">
-                      <div className="text-sm text-gray-600 mb-1">
-                        {index + 1}. {result.primary_location?.source?.display_name || 'Unknown Journal'}. 
-                        {result.publication_year && ` ${result.publication_year}`}
-                        {result.biblio?.volume && `;${result.biblio.volume}`}
-                        {result.biblio?.issue && `(${result.biblio.issue})`}
-                        {result.biblio?.first_page && `:${result.biblio.first_page}`}
-                        {result.biblio?.last_page && `-${result.biblio.last_page}`}.
-                      </div>
-                      <h4 className="text-base font-normal mb-1">
-                        <a href={result.doi || '#'} className="text-blue-600 hover:underline">
-                          {result.title}
-                        </a>
-                      </h4>
-                      <p className="text-sm text-gray-700 mb-2">
-                        {result.authorships?.slice(0, 3).map((auth: any) => auth.author.display_name).join(', ')}
-                        {result.authorships?.length > 3 && ', et al.'}
-                      </p>
-                      {result.abstract && (
-                        <p className="text-sm text-gray-600 line-clamp-2">
-                          {typeof result.abstract === 'string' 
-                            ? result.abstract 
-                            : result.abstract.inverted_index 
-                              ? Object.keys(result.abstract.inverted_index).sort((a, b) => {
-                                  const minA = Math.min(...result.abstract.inverted_index[a]);
-                                  const minB = Math.min(...result.abstract.inverted_index[b]);
-                                  return minA - minB;
-                                }).slice(0, 50).map(word => word + ' ').join('')
-                              : ''}...
-                        </p>
-                      )}
-                      <div className="mt-2 text-sm">
-                        {result.open_access?.oa_url && (
-                          <a href={result.open_access.oa_url} className="text-blue-600 hover:underline mr-4">
-                            Free full text
-                          </a>
-                        )}
-                        <span className="text-gray-500">PMID: {result.ids?.pmid || 'N/A'}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+      
 
       {/* Main Features Section - Combined */}
       <section className="max-w-7xl mx-auto px-4 py-12">
