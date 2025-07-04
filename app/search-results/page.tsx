@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { getScreeningConfigurations, getActiveConfiguration } from '@/lib/screening-config-api'
-import SearchResultsClient from './search-results-client'
+import SearchResultsClientRefactored from './SearchResultsClientRefactored'
 
 export default async function SearchResultsPageWrapper() {
   const supabase = await createSupabaseServerClient()
@@ -22,7 +22,7 @@ export default async function SearchResultsPageWrapper() {
 
     return (
       <Suspense fallback={<div>Loading...</div>}>
-        <SearchResultsClient 
+        <SearchResultsClientRefactored 
           configurations={configurations}
           activeConfig={activeConfig}
           userId={user.id}
@@ -33,7 +33,7 @@ export default async function SearchResultsPageWrapper() {
     console.error('Error loading configurations:', error)
     // Return client component with empty data to handle error state
     return (
-      <SearchResultsClient 
+      <SearchResultsClientRefactored 
         configurations={[]}
         activeConfig={null}
         userId={user.id}
