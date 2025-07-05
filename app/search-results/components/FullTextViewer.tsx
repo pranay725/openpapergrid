@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { X, FileText, Brain, Code, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, FileText, Brain, Code, ChevronDown, ChevronRight, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CustomField } from '@/lib/database.types';
+import { SearchResult } from '../types';
+import { ExtractionState } from '../hooks/useFullTextExtraction';
+import { useChat } from 'ai/react';
 
 interface FullTextViewerProps {
-  workId: string;
-  title: string;
+  result: SearchResult;
   fullText?: string;
   sections?: Record<string, string>;
   extractionPrompts?: Array<{
@@ -13,18 +15,25 @@ interface FullTextViewerProps {
     prompt: string;
     response?: any;
   }>;
+  extractionState?: ExtractionState;
+  provider: string;
+  model: string;
+  onFetchFullText?: () => void;
   onClose: () => void;
 }
 
 export const FullTextViewer: React.FC<FullTextViewerProps> = ({
-  workId,
-  title,
+  result,
   fullText,
   sections,
   extractionPrompts,
+  extractionState,
+  provider,
+  model,
+  onFetchFullText,
   onClose
 }) => {
-  const [activeTab, setActiveTab] = useState<'fulltext' | 'sections' | 'prompts'>('fulltext');
+  const [activeTab, setActiveTab] = useState<'info' | 'fulltext' | 'sections' | 'prompts' | 'chat'>('info');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [expandedPrompts, setExpandedPrompts] = useState<Record<string, boolean>>({});
 
@@ -36,13 +45,30 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
     setExpandedPrompts(prev => ({ ...prev, [fieldId]: !prev[fieldId] }));
   };
 
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    setMessages
+  } = useChat({
+    api: '/api/ai/chat',
+    body: {
+      workId: result.id,
+      fullText,
+      provider,
+      model
+    }
+  });
+
   return (
     <div className="fixed inset-y-0 right-0 w-1/2 bg-white shadow-2xl z-50 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex-1 pr-4">
-          <h2 className="text-lg font-semibold truncate">{title}</h2>
-          <p className="text-sm text-gray-500">Full Text & Extraction Details</p>
+          <h2 className="text-lg font-semibold truncate">{result.title}</h2>
+          <p className="text-sm text-gray-500">Publication Details</p>
         </div>
         <Button
           variant="outline"
@@ -57,10 +83,21 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
       {/* Tabs */}
       <div className="flex border-b">
         <button
+          onClick={() => setActiveTab('info')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'info'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <FileText className="h-4 w-4" />
+          Info
+        </button>
+        <button
           onClick={() => setActiveTab('fulltext')}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'fulltext' 
-              ? 'border-blue-600 text-blue-600' 
+            activeTab === 'fulltext'
+              ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
@@ -81,18 +118,47 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
         <button
           onClick={() => setActiveTab('prompts')}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'prompts' 
-              ? 'border-blue-600 text-blue-600' 
+            activeTab === 'prompts'
+              ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
           <Brain className="h-4 w-4" />
           AI Prompts
         </button>
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'chat'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <MessageCircle className="h-4 w-4" />
+          Chat
+        </button>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
+        {activeTab === 'info' && (
+          <div className="space-y-4">
+            <div className="text-sm text-gray-700">
+              <span className="font-medium">Authors:</span>{' '}
+              {result.authorships?.map(a => a.author.display_name).join(', ') || 'N/A'}
+            </div>
+            <div className="text-sm text-gray-700">
+              <span className="font-medium">Journal:</span>{' '}
+              {result.primary_location?.source?.display_name || 'Unknown'} ({result.publication_year})
+            </div>
+            {(sections?.abstract || result.abstract) && (
+              <div>
+                <h3 className="text-sm font-medium mb-1">Abstract</h3>
+                <pre className="whitespace-pre-wrap text-sm text-gray-700">{sections?.abstract || result.abstract}</pre>
+              </div>
+            )}
+          </div>
+        )}
         {activeTab === 'fulltext' && (
           <div className="prose prose-sm max-w-none">
             {fullText ? (
@@ -182,7 +248,42 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
             )}
           </div>
         )}
+
+        {activeTab === 'chat' && (
+          <div className="flex flex-col h-full">
+            {!fullText ? (
+              <div className="p-3 space-y-2">
+                <p className="text-sm text-gray-600">Full text is required for chat.</p>
+                <Button onClick={onFetchFullText} disabled={extractionState?.status === 'fetching' || extractionState?.status === 'extracting'}>
+                  {extractionState?.status === 'fetching' || extractionState?.status === 'extracting' ? 'Fetching Full Text...' : 'Fetch Full Text'}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto space-y-2 mb-2">
+                  {messages.map((m, i) => (
+                    <div
+                      key={i}
+                      className={`p-2 rounded ${m.role === 'user' ? 'bg-blue-50 text-right' : 'bg-gray-100'}`}
+                    >
+                      {m.content}
+                    </div>
+                  ))}
+                </div>
+                <form onSubmit={handleSubmit} className="flex gap-2">
+                  <input
+                    value={input}
+                    onChange={handleInputChange}
+                    className="flex-1 border rounded px-3 py-2 text-sm"
+                    placeholder="Ask a question..."
+                  />
+                  <Button type="submit" disabled={isLoading || !input}>Send</Button>
+                </form>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
-}; 
+};
