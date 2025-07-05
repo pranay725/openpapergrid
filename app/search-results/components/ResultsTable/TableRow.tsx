@@ -5,7 +5,7 @@ import { SearchResult, PaperStatus, AIResponse, ExtractionMetrics } from '../../
 import { AIResponseCell } from './AIResponseCell';
 import { StatusIndicator } from './StatusIndicator';
 import { ExtractionStatus } from '../../hooks/useFullTextExtraction';
-import { FileText, ExternalLink } from 'lucide-react';
+import { FileText, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface TableRowProps {
   result: SearchResult;
@@ -18,6 +18,8 @@ interface TableRowProps {
   extractionProgress?: number;
   currentField?: string;
   metrics?: ExtractionMetrics;
+  retryCount?: number;
+  maxRetries?: number;
   onFieldValueChange?: (resultId: string, fieldId: string, value: any) => void;
   onViewFullText?: (result: SearchResult) => void;
   onRetryExtraction?: (result: SearchResult) => void;
@@ -36,6 +38,8 @@ export const TableRow: React.FC<TableRowProps> = ({
   extractionProgress,
   currentField,
   metrics,
+  retryCount = 0,
+  maxRetries = 3,
   onFieldValueChange,
   onViewFullText,
   onRetryExtraction,
@@ -51,6 +55,10 @@ export const TableRow: React.FC<TableRowProps> = ({
       metricsData: metrics
     });
   }
+  
+  const showRetryButton = extractionStatus === 'error' && retryCount < maxRetries;
+  const showRefreshButton = extractionStatus === 'completed';
+  
   return (
     <tr className="border-b border-gray-200 hover:bg-gray-50">
       {/* Fixed columns */}

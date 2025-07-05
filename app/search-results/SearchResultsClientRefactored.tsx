@@ -15,7 +15,7 @@ import { useSearchResults } from './hooks/useSearchResults';
 import { useAIResponses } from './hooks/useAIResponses';
 import { useFullTextExtraction } from './hooks/useFullTextExtraction';
 import { buildFilterUrl } from './utils/filterHelpers';
-import type { SearchResultsClientProps, SearchFilters, SearchResult, ExtractionMetrics } from './types';
+import { SearchResult, ExtractionMetrics, SearchFilters, SearchResultsClientProps } from './types';
 import { CustomField, ScreeningConfiguration } from '@/lib/database.types';
 import { 
   setActiveConfiguration, 
@@ -118,6 +118,9 @@ export default function SearchResultsClientRefactored({
   const [aiModel, setAIModel] = useState('openrouter/cypher-alpha:free');
   const [viewingFullText, setViewingFullText] = useState<SearchResult | null>(null);
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('abstract');
+  
+  // Track previous extraction mode
+  const prevExtractionModeRef = useRef(extractionMode);
 
   // Custom hooks
   const { filters, pendingFilters, counts, actions } = useSearchFilters({
@@ -162,7 +165,10 @@ export default function SearchResultsClientRefactored({
     extractionStates,
     getFullTextData,
     getExtractionPrompts,
-    getExtractionMetrics
+    getExtractionMetrics,
+    retryCount,
+    MAX_RETRIES,
+    clearAllExtractionData
   } = useFullTextExtraction({
     onFieldExtracted: (workId, fieldId, response) => {
       // Update the full AI response
@@ -581,6 +587,8 @@ export default function SearchResultsClientRefactored({
                         if (metrics) acc[result.id] = metrics;
                         return acc;
                       }, {} as Record<string, ExtractionMetrics>)}
+                      retryCount={retryCount}
+                      maxRetries={MAX_RETRIES}
                       onFieldEdit={setEditingField}
                       onFieldValueChange={updateFieldValue}
                       onViewFullText={(result) => setViewingFullText(result)}
