@@ -13,9 +13,14 @@ interface ResultsTableProps {
   aiResponses: Record<string, AIResponse>;
   extractionStates?: Record<string, { status: ExtractionStatus; progress: number; currentField?: string }>;
   extractionMetrics?: Record<string, ExtractionMetrics>;
+  retryCount?: Record<string, number>;
+  maxRetries?: number;
   onFieldEdit?: (field: CustomField) => void;
   onFieldValueChange?: (resultId: string, fieldId: string, value: any) => void;
   onViewFullText?: (result: SearchResult) => void;
+  onRetryExtraction?: (result: SearchResult) => void;
+  onRefreshExtraction?: (result: SearchResult) => void;
+  onExtractSingleField?: (result: SearchResult, field: CustomField) => void;
 }
 
 export const ResultsTable: React.FC<ResultsTableProps> = ({
@@ -25,9 +30,14 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({
   aiResponses,
   extractionStates = {},
   extractionMetrics = {},
+  retryCount = {},
+  maxRetries = 3,
   onFieldEdit,
   onFieldValueChange,
-  onViewFullText
+  onViewFullText,
+  onRetryExtraction,
+  onRefreshExtraction,
+  onExtractSingleField
 }) => {
   return (
     <div className="overflow-x-auto border border-gray-200 rounded-lg" style={{ position: 'relative' }}>
@@ -69,8 +79,13 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({
                 extractionProgress={extractionState?.progress}
                 currentField={extractionState?.currentField}
                 metrics={metrics}
+                retryCount={retryCount[result.id]}
+                maxRetries={maxRetries}
                 onFieldValueChange={onFieldValueChange}
                 onViewFullText={onViewFullText}
+                onRetryExtraction={onRetryExtraction}
+                onRefreshExtraction={onRefreshExtraction}
+                onExtractSingleField={onExtractSingleField}
               />
             );
           })}

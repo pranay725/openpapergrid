@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { Logo } from '@/components/Logo';
@@ -15,7 +15,7 @@ import { useSearchResults } from './hooks/useSearchResults';
 import { useAIResponses } from './hooks/useAIResponses';
 import { useFullTextExtraction } from './hooks/useFullTextExtraction';
 import { buildFilterUrl } from './utils/filterHelpers';
-import type { SearchResultsClientProps, SearchFilters, SearchResult, ExtractionMetrics } from './types';
+import { SearchResult, ExtractionMetrics, SearchFilters, SearchResultsClientProps } from './types';
 import { CustomField, ScreeningConfiguration } from '@/lib/database.types';
 import { 
   setActiveConfiguration, 
@@ -52,6 +52,9 @@ export default function SearchResultsClientRefactored({
   const [aiModel, setAIModel] = useState('openrouter/cypher-alpha:free');
   const [viewingFullText, setViewingFullText] = useState<SearchResult | null>(null);
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('abstract');
+  
+  // Track previous extraction mode
+  const prevExtractionModeRef = useRef(extractionMode);
 
   // Custom hooks
   const { filters, pendingFilters, counts, actions } = useSearchFilters({
@@ -89,12 +92,17 @@ export default function SearchResultsClientRefactored({
   // Full text extraction hook
   const { 
     processWork, 
+    extractSingleField,
+    retryExtraction,
     cancelExtraction, 
     getExtractionState, 
     extractionStates,
     getFullTextData,
     getExtractionPrompts,
-    getExtractionMetrics
+    getExtractionMetrics,
+    retryCount,
+    MAX_RETRIES,
+    clearAllExtractionData
   } = useFullTextExtraction({
     onFieldExtracted: (workId, fieldId, response) => {
       // Update the full AI response
@@ -122,6 +130,24 @@ export default function SearchResultsClientRefactored({
     model: aiModel,
     mode: extractionMode
   });
+
+  // Clear extraction data when mode changes
+  useEffect(() => {
+    if (prevExtractionModeRef.current !== extractionMode) {
+      // Mode has actually changed
+      prevExtractionModeRef.current = extractionMode;
+      
+      // Clear all extraction data when switching modes
+      clearAllExtractionData();
+      
+      // Also clear AI responses
+      if (results) {
+        results.forEach(result => {
+          clearResultResponses(result.id);
+        });
+      }
+    }
+  }, [extractionMode, clearAllExtractionData, results, clearResultResponses]);
 
   // Update custom fields when config changes
   useEffect(() => {
@@ -223,6 +249,18 @@ export default function SearchResultsClientRefactored({
         processWork(result, customFields);
       }
     });
+  };
+  
+  const handleRetryExtraction = (result: SearchResult) => {
+    retryExtraction(result, customFields);
+  };
+  
+  const handleRefreshExtraction = (result: SearchResult) => {
+    processWork(result, customFields, true); // Force refresh
+  };
+  
+  const handleExtractSingleField = (result: SearchResult, field: CustomField) => {
+    extractSingleField(result, field, true); // Force refresh for single field
   };
 
   const totalPages = Math.ceil(totalResults / 10);
@@ -408,9 +446,14 @@ export default function SearchResultsClientRefactored({
                         if (metrics) acc[result.id] = metrics;
                         return acc;
                       }, {} as Record<string, ExtractionMetrics>)}
+                      retryCount={retryCount}
+                      maxRetries={MAX_RETRIES}
                       onFieldEdit={setEditingField}
                       onFieldValueChange={updateFieldValue}
                       onViewFullText={(result) => setViewingFullText(result)}
+                      onRetryExtraction={handleRetryExtraction}
+                      onRefreshExtraction={handleRefreshExtraction}
+                      onExtractSingleField={handleExtractSingleField}
                     />
                     <Pagination
                       currentPage={currentPage}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useCompletion } from 'ai/react';
 import { SearchResult, CustomField, AIResponse, ExtractionMetrics } from '../types';
 import { prepareAbstractData, prepareAbstractDataWithScraping } from '../utils/abstractHelpers';
@@ -31,15 +31,25 @@ interface UseFullTextExtractionProps {
 export const useFullTextExtraction = ({
   onFieldExtracted,
   onFieldStreaming,
-  provider = 'openai',
-  model = 'gpt-3.5-turbo',
-  mode = 'fulltext'
-}: UseFullTextExtractionProps = {}) => {
+  provider = 'openrouter',
+  model = 'openrouter/cypher-alpha:free',
+  mode = 'abstract'
+}: UseFullTextExtractionProps) => {
   const [extractionStates, setExtractionStates] = useState<Record<string, ExtractionState>>({});
-  const [fullTextCache, setFullTextCache] = useState<Record<string, any>>({});
-  const [extractionPrompts, setExtractionPrompts] = useState<Record<string, Array<any>>>({});
+  const [fullTextCache, setFullTextCache] = useState<Record<string, FullTextData>>({});
+  const [extractionPrompts, setExtractionPrompts] = useState<Record<string, Array<{ field: CustomField; response: AIResponse }>>>({});
   const [extractionMetrics, setExtractionMetrics] = useState<Record<string, ExtractionMetrics>>({});
   const abortControllers = useRef<Record<string, AbortController>>({});
+  
+  // Track retry counts
+  const [retryCount, setRetryCount] = useState<Record<string, number>>({});
+  const MAX_RETRIES = 3;
+  
+  // Use a ref to always have the current mode value
+  const modeRef = useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   // Update extraction state for a work
   const updateExtractionState = useCallback((workId: string, update: Partial<ExtractionState>) => {
@@ -197,7 +207,7 @@ Respond in JSON format matching this structure:
         sections: fullTextData.sections,
         provider,
         model,
-        mode
+        mode: modeRef.current
       }),
       signal
     });
@@ -259,14 +269,34 @@ Respond in JSON format matching this structure:
     }
 
     throw new Error('Extraction completed without final results');
-  }, [provider, model, mode, onFieldStreaming]);
+  }, [provider, model, onFieldStreaming]);
 
-  // Process all fields for a work
+  // Process all fields for a work with retry logic
   const processWork = useCallback(async (
     work: SearchResult,
-    fields: CustomField[]
+    fields: CustomField[],
+    forceRefresh: boolean = false
   ) => {
     const workId = work.id;
+    
+    // Clear cache if forcing refresh
+    if (forceRefresh) {
+      setFullTextCache(prev => {
+        const newCache = { ...prev };
+        delete newCache[workId];
+        return newCache;
+      });
+      setExtractionPrompts(prev => {
+        const newPrompts = { ...prev };
+        delete newPrompts[workId];
+        return newPrompts;
+      });
+      setExtractionMetrics(prev => {
+        const newMetrics = { ...prev };
+        delete newMetrics[workId];
+        return newMetrics;
+      });
+    }
     
     // Create abort controller for this work
     const abortController = new AbortController();
@@ -280,7 +310,7 @@ Respond in JSON format matching this structure:
       let scrapedFrom: string | undefined;
       let fullTextData: FullTextData;
       
-      if (mode === 'abstract') {
+      if (modeRef.current === 'abstract') {
         // For abstract mode, reconstruct abstract from inverted index if needed
         // and attempt scraping if no abstract is available
         const scrapingStartTime = Date.now();
@@ -376,13 +406,13 @@ Respond in JSON format matching this structure:
           abstractSource,
           abstractLength: fullTextData.abstractLength,
           fullTextLength: fullTextData.fullTextLength,
-          fullTextSource: mode === 'fulltext' && 'source' in fullTextData ? fullTextData.source as 'pmc' | 'pdf' | 'firecrawl' : undefined,
+          fullTextSource: modeRef.current === 'fulltext' && 'source' in fullTextData ? fullTextData.source as 'pmc' | 'pdf' | 'firecrawl' : undefined,
           scrapingDuration,
           scrapedFrom,
           model,
           provider,
-          chunksProcessed: mode === 'abstract' ? 1 : undefined,
-          totalChunks: mode === 'abstract' ? 1 : undefined,
+          chunksProcessed: modeRef.current === 'abstract' ? 1 : undefined,
+          totalChunks: modeRef.current === 'abstract' ? 1 : undefined,
           promptTokens: usage?.promptTokens,
           completionTokens: usage?.completionTokens,
           totalTokens: usage?.totalTokens,
@@ -394,6 +424,13 @@ Respond in JSON format matching this structure:
           ...prev,
           [workId]: metrics
         }));
+        
+        // Reset retry count on success
+        setRetryCount(prev => {
+          const newCount = { ...prev };
+          delete newCount[workId];
+          return newCount;
+        });
       } catch (error) {
         console.error('Failed to extract fields:', error);
         // The error is already handled in the outer try-catch
@@ -408,21 +445,145 @@ Respond in JSON format matching this structure:
 
     } catch (error) {
       if (!abortController.signal.aborted) {
+        const currentRetries = retryCount[workId] || 0;
+        
         updateExtractionState(workId, { 
           status: 'error', 
-          error: error instanceof Error ? error.message : 'Processing failed' 
+          error: error instanceof Error ? error.message : 'Processing failed',
+          progress: 0
         });
+        
+        // Update retry count
+        setRetryCount(prev => ({
+          ...prev,
+          [workId]: currentRetries + 1
+        }));
       }
     } finally {
       delete abortControllers.current[workId];
     }
-  }, [fetchFullText, extractFields, onFieldExtracted, onFieldStreaming, updateExtractionState, mode]);
+  }, [fetchFullText, extractFields, onFieldExtracted, onFieldStreaming, updateExtractionState, retryCount]);
+
+  // Extract a single field for a work
+  const extractSingleField = useCallback(async (
+    work: SearchResult,
+    field: CustomField,
+    forceRefresh: boolean = false
+  ) => {
+    const workId = work.id;
+    
+    // Check if we have cached full text data
+    let fullTextData = fullTextCache[workId];
+    
+    if (!fullTextData || forceRefresh) {
+      // Need to fetch the data first
+      updateExtractionState(workId, { status: 'fetching', progress: 10 });
+      
+      try {
+        if (modeRef.current === 'abstract') {
+          const abstractData = await prepareAbstractDataWithScraping(work);
+          if (!abstractData.hasAbstract) {
+            throw new Error('No abstract available');
+          }
+          
+          fullTextData = {
+            fullText: `Title: ${abstractData.title}\n\nAbstract: ${abstractData.abstract}`,
+            sections: {
+              title: abstractData.title,
+              abstract: abstractData.abstract
+            },
+            wasScraped: abstractData.wasScraped,
+            abstractLength: abstractData.abstract.length
+          };
+          
+          setFullTextCache(prev => ({
+            ...prev,
+            [workId]: fullTextData
+          }));
+        } else {
+          fullTextData = await fetchFullText(work);
+        }
+      } catch (error) {
+        updateExtractionState(workId, { 
+          status: 'error', 
+          error: error instanceof Error ? error.message : 'Failed to fetch text'
+        });
+        throw error;
+      }
+    }
+    
+    // Now extract just this field
+    updateExtractionState(workId, { 
+      status: 'extracting', 
+      progress: 50,
+      currentField: field.name
+    });
+    
+    try {
+      const { results } = await extractFields(work, [field], fullTextData);
+      const response = results[field.id];
+      
+      if (response && onFieldExtracted) {
+        onFieldExtracted(workId, field.id, response);
+        
+        // Update extraction prompts
+        setExtractionPrompts(prev => {
+          const workPrompts = prev[workId] || [];
+          // Remove old prompt for this field if exists
+          const filtered = workPrompts.filter(p => p.field.id !== field.id);
+          return {
+            ...prev,
+            [workId]: [...filtered, { field, response }]
+          };
+        });
+      }
+      
+      updateExtractionState(workId, { 
+        status: 'completed', 
+        progress: 100,
+        currentField: undefined
+      });
+      
+      return response;
+    } catch (error) {
+      updateExtractionState(workId, { 
+        status: 'error', 
+        error: error instanceof Error ? error.message : 'Field extraction failed'
+      });
+      throw error;
+    }
+  }, [fullTextCache, fetchFullText, extractFields, onFieldExtracted, updateExtractionState]);
+
+  // Retry failed extraction for a work
+  const retryExtraction = useCallback(async (
+    work: SearchResult,
+    fields: CustomField[]
+  ) => {
+    const workId = work.id;
+    const currentRetries = retryCount[workId] || 0;
+    
+    if (currentRetries >= MAX_RETRIES) {
+      updateExtractionState(workId, {
+        status: 'error',
+        error: `Maximum retries (${MAX_RETRIES}) exceeded`
+      });
+      return;
+    }
+    
+    // Clear error state and retry
+    updateExtractionState(workId, { status: 'idle', progress: 0 });
+    await processWork(work, fields, true); // Force refresh on retry
+  }, [retryCount, processWork, updateExtractionState]);
 
   // Cancel extraction for a work
   const cancelExtraction = useCallback((workId: string) => {
     const controller = abortControllers.current[workId];
     if (controller) {
-      controller.abort();
+      try {
+        controller.abort(new DOMException('User cancelled extraction', 'AbortError'));
+      } catch (e) {
+        // Ignore abort errors
+      }
       delete abortControllers.current[workId];
       updateExtractionState(workId, { 
         status: 'idle', 
@@ -452,13 +613,38 @@ Respond in JSON format matching this structure:
     return extractionMetrics[workId];
   }, [extractionMetrics]);
 
+  // Clear all extraction data for all works
+  const clearAllExtractionData = useCallback(() => {
+    // Cancel all ongoing extractions
+    Object.keys(abortControllers.current).forEach(workId => {
+      try {
+        abortControllers.current[workId]?.abort(new DOMException('Extraction mode changed', 'AbortError'));
+      } catch (e) {
+        // Ignore abort errors
+      }
+    });
+    abortControllers.current = {};
+    
+    // Clear all states
+    setExtractionStates({});
+    setFullTextCache({});
+    setExtractionPrompts({});
+    setExtractionMetrics({});
+    setRetryCount({});
+  }, []);
+
   return {
     processWork,
+    extractSingleField,
+    retryExtraction,
     cancelExtraction,
     getExtractionState,
     extractionStates,
     getFullTextData,
     getExtractionPrompts,
-    getExtractionMetrics
+    getExtractionMetrics,
+    retryCount,
+    MAX_RETRIES,
+    clearAllExtractionData
   };
 }; 

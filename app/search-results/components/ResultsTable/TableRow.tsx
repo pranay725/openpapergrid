@@ -4,7 +4,7 @@ import { SearchResult, PaperStatus, AIResponse, ExtractionMetrics } from '../../
 import { AIResponseCell } from './AIResponseCell';
 import { StatusIndicator } from './StatusIndicator';
 import { ExtractionStatus } from '../../hooks/useFullTextExtraction';
-import { FileText, ExternalLink } from 'lucide-react';
+import { FileText, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface TableRowProps {
   result: SearchResult;
@@ -17,8 +17,13 @@ interface TableRowProps {
   extractionProgress?: number;
   currentField?: string;
   metrics?: ExtractionMetrics;
+  retryCount?: number;
+  maxRetries?: number;
   onFieldValueChange?: (resultId: string, fieldId: string, value: any) => void;
   onViewFullText?: (result: SearchResult) => void;
+  onRetryExtraction?: (result: SearchResult) => void;
+  onRefreshExtraction?: (result: SearchResult) => void;
+  onExtractSingleField?: (result: SearchResult, field: CustomField) => void;
 }
 
 export const TableRow: React.FC<TableRowProps> = ({
@@ -32,8 +37,13 @@ export const TableRow: React.FC<TableRowProps> = ({
   extractionProgress,
   currentField,
   metrics,
+  retryCount = 0,
+  maxRetries = 3,
   onFieldValueChange,
-  onViewFullText
+  onViewFullText,
+  onRetryExtraction,
+  onRefreshExtraction,
+  onExtractSingleField
 }) => {
   // Debug logging for first row
   if (index === 0 && metrics) {
@@ -44,6 +54,10 @@ export const TableRow: React.FC<TableRowProps> = ({
       metricsData: metrics
     });
   }
+  
+  const showRetryButton = extractionStatus === 'error' && retryCount < maxRetries;
+  const showRefreshButton = extractionStatus === 'completed';
+  
   return (
     <tr className="border-b border-gray-200 hover:bg-gray-50">
       {/* Fixed columns */}
@@ -99,6 +113,32 @@ export const TableRow: React.FC<TableRowProps> = ({
               <span className="ml-2 text-orange-600 font-medium">Open Access</span>
             )}
           </div>
+          
+          {/* Action buttons for retry/refresh */}
+          {(showRetryButton || showRefreshButton) && (
+            <div className="flex items-center gap-2 mt-1">
+              {showRetryButton && (
+                <button
+                  onClick={() => onRetryExtraction?.(result)}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                  title={`Retry extraction (${retryCount}/${maxRetries} attempts)`}
+                >
+                  <AlertCircle className="h-3 w-3" />
+                  Retry ({maxRetries - retryCount} left)
+                </button>
+              )}
+              {showRefreshButton && (
+                <button
+                  onClick={() => onRefreshExtraction?.(result)}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                  title="Re-extract all fields"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Re-extract
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </td>
       <td className="sticky left-[492px] z-10 bg-white p-3 w-32 border-r border-gray-200 overflow-visible">
@@ -126,6 +166,7 @@ export const TableRow: React.FC<TableRowProps> = ({
               aiResponse={aiResponses[responseKey]}
               isExtracting={isExtractingThisField}
               onValueChange={(value) => onFieldValueChange?.(result.id, field.id, value)}
+              onRefreshField={() => onExtractSingleField?.(result, field)}
             />
           </td>
         );

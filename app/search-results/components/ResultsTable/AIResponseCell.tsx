@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileTextIcon } from 'lucide-react';
+import { FileTextIcon, RefreshCw } from 'lucide-react';
 import { CustomField } from '@/lib/database.types';
 import { AIResponse, SearchResult } from '../../types';
 
@@ -9,6 +9,7 @@ interface AIResponseCellProps {
   aiResponse?: AIResponse;
   isExtracting?: boolean;
   onValueChange?: (value: any) => void;
+  onRefreshField?: () => void;
 }
 
 export const AIResponseCell: React.FC<AIResponseCellProps> = ({ 
@@ -16,7 +17,8 @@ export const AIResponseCell: React.FC<AIResponseCellProps> = ({
   result, 
   aiResponse,
   isExtracting = false,
-  onValueChange 
+  onValueChange,
+  onRefreshField
 }) => {
   const [showCitations, setShowCitations] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -132,6 +134,21 @@ export const AIResponseCell: React.FC<AIResponseCellProps> = ({
           >
             <FileTextIcon className="h-3 w-3" />
             {aiResponse.citations.length} source{aiResponse.citations.length !== 1 ? 's' : ''}
+          </button>
+        )}
+        
+        {/* Refresh field button */}
+        {onRefreshField && !isStreaming && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRefreshField();
+            }}
+            className="text-xs text-gray-600 hover:text-gray-800 flex items-center gap-1"
+            title="Re-extract this field"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Refresh
           </button>
         )}
       </div>
