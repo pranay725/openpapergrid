@@ -6,12 +6,10 @@ import {
   Settings2Icon,
   PlusIcon,
   TrashIcon,
-  EditIcon,
-  LockIcon
+  EditIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScreeningConfiguration, CustomField } from '@/lib/database.types';
-import { useRouter } from 'next/navigation';
 
 export type ExtractionMode = 'abstract' | 'fulltext';
 
@@ -43,9 +41,6 @@ interface InlineExtractionControlsProps {
   totalResults: number;
   sortBy: string;
   onSortChange: (sort: string) => void;
-  
-  // Auth
-  isAuthenticated?: boolean;
 }
 
 // AI Provider configuration
@@ -82,12 +77,10 @@ export const InlineExtractionControls: React.FC<InlineExtractionControlsProps> =
   onDeleteConfig,
   totalResults,
   sortBy,
-  onSortChange,
-  isAuthenticated = false
+  onSortChange
 }) => {
   const [showConfigMenu, setShowConfigMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
-  const router = useRouter();
 
   const userConfigs = configurations.filter(c => c.visibility === 'private' && c.user_id === userId);
   const defaultConfigs = configurations.filter(c => c.visibility === 'default');
@@ -96,9 +89,6 @@ export const InlineExtractionControls: React.FC<InlineExtractionControlsProps> =
   // Get current model display name
   const currentModelInfo = AI_PROVIDERS.openrouter.models.find(m => m.id === selectedModel);
   const modelDisplayName = currentModelInfo?.short || 'AI';
-  
-  // Check if full text is disabled for anonymous users
-  const fullTextDisabled = extractionMode === 'fulltext' && !isAuthenticated;
 
   return (
     <div className="flex items-stretch justify-between gap-6 mb-6 px-6 py-3 bg-gray-50 border-y border-gray-200">
@@ -270,23 +260,13 @@ export const InlineExtractionControls: React.FC<InlineExtractionControlsProps> =
               Abstract
             </button>
             <button
-              onClick={() => {
-                if (!isAuthenticated) {
-                  // Show sign in prompt
-                  if (confirm('Full text extraction requires sign in. Would you like to sign in now?')) {
-                    router.push('/auth/login?redirectTo=/search-results');
-                  }
-                } else {
-                  onModeChange('fulltext');
-                }
-              }}
-              className={`px-3 text-xs font-medium rounded transition-all flex items-center gap-1 ${
+              onClick={() => onModeChange('fulltext')}
+              className={`px-3 text-xs font-medium rounded transition-all ${
                 extractionMode === 'fulltext'
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              {!isAuthenticated && <LockIcon className="h-3 w-3" />}
               Full Text
             </button>
           </div>
@@ -336,16 +316,7 @@ export const InlineExtractionControls: React.FC<InlineExtractionControlsProps> =
         {/* Extract Button */}
         <div className="flex flex-col justify-between h-full">
           <div className="text-xs text-gray-500 mb-1.5 invisible">Action</div>
-          {fullTextDisabled ? (
-            <Button
-              size="sm"
-              onClick={() => router.push('/auth/login?redirectTo=/search-results')}
-              className="h-8 px-4 gap-2 bg-amber-600 hover:bg-amber-700 text-white"
-            >
-              <LockIcon className="h-3.5 w-3.5" />
-              Sign In to Extract
-            </Button>
-          ) : isExtracting ? (
+          {isExtracting ? (
             <Button
               size="sm"
               variant="outline"
@@ -367,7 +338,7 @@ export const InlineExtractionControls: React.FC<InlineExtractionControlsProps> =
               } text-white border-0 focus:outline-none focus:ring-2`}
             >
               <SparklesIcon className="h-3.5 w-3.5" />
-              Extract
+              {hasExtracted ? 'Re-extract' : 'Extract'}
             </Button>
           )}
         </div>

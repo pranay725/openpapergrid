@@ -15,7 +15,7 @@ import { useSearchResults } from './hooks/useSearchResults';
 import { useAIResponses } from './hooks/useAIResponses';
 import { useFullTextExtraction } from './hooks/useFullTextExtraction';
 import { buildFilterUrl } from './utils/filterHelpers';
-import { SearchResult, ExtractionMetrics, SearchFilters, SearchResultsClientProps } from './types';
+import type { SearchResultsClientProps, SearchFilters, SearchResult, ExtractionMetrics } from './types';
 import { CustomField, ScreeningConfiguration } from '@/lib/database.types';
 import { 
   setActiveConfiguration, 
@@ -24,7 +24,6 @@ import {
 import { FullTextViewer } from './components/FullTextViewer';
 import { InlineExtractionControls, ExtractionMode } from './components/InlineExtractionControls';
 import { ConfigurationDialog } from './components/ConfigurationManagement/ConfigurationDialog';
-import { UsageLimitIndicator } from './components/UsageLimitIndicator';
 
 export default function SearchResultsClientRefactored({ 
   configurations, 
@@ -112,15 +111,13 @@ export default function SearchResultsClientRefactored({
   const [showAddFieldDialog, setShowAddFieldDialog] = useState(false);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [showConfigDialog, setShowConfigDialog] = useState(false);
+  const [showConfigDialog, setShowConfigDialog] = useState(false);
   const [editingField, setEditingField] = useState<CustomField | null>(null);
   const [aiProvider, setAIProvider] = useState('openrouter');
   const [aiModel, setAIModel] = useState('openrouter/cypher-alpha:free');
+  const [aiModel, setAIModel] = useState('openrouter/cypher-alpha:free');
   const [viewingFullText, setViewingFullText] = useState<SearchResult | null>(null);
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('abstract');
-  const [hasAutoExtracted, setHasAutoExtracted] = useState(false);
-  
-  // Track previous extraction mode
-  const prevExtractionModeRef = useRef(extractionMode);
 
   // Custom hooks
   const { filters, pendingFilters, counts, actions } = useSearchFilters({
@@ -165,10 +162,7 @@ export default function SearchResultsClientRefactored({
     extractionStates,
     getFullTextData,
     getExtractionPrompts,
-    getExtractionMetrics,
-    retryCount,
-    MAX_RETRIES,
-    clearAllExtractionData
+    getExtractionMetrics
   } = useFullTextExtraction({
     onFieldExtracted: (workId, fieldId, response) => {
       // Update the full AI response
@@ -193,6 +187,8 @@ export default function SearchResultsClientRefactored({
       }
     },
     provider: aiProvider,
+    model: aiModel,
+    mode: extractionMode
     model: aiModel,
     mode: extractionMode
   });
@@ -297,6 +293,7 @@ export default function SearchResultsClientRefactored({
     if (configId === 'custom') {
       // Handle custom configuration creation
       setShowConfigDialog(true);
+      setShowConfigDialog(true);
       return;
     }
 
@@ -313,6 +310,7 @@ export default function SearchResultsClientRefactored({
   };
 
   const handleAddColumn = () => {
+    setShowConfigDialog(true);
     setShowConfigDialog(true);
   };
 
@@ -520,7 +518,7 @@ export default function SearchResultsClientRefactored({
                   <InlineExtractionControls
                     // Extraction props
                     extractionMode={extractionMode}
-                    onModeChange={handleExtractionModeChange}
+                    onModeChange={setExtractionMode}
                     selectedProvider={aiProvider}
                     selectedModel={aiModel}
                     onProviderChange={(provider: string, model: string) => {
@@ -561,8 +559,6 @@ export default function SearchResultsClientRefactored({
                     totalResults={totalResults}
                     sortBy={sortBy}
                     onSortChange={handleSortChange}
-                    // Auth
-                    isAuthenticated={isAuthenticated}
                   />
                 )}
                 
@@ -585,8 +581,6 @@ export default function SearchResultsClientRefactored({
                         if (metrics) acc[result.id] = metrics;
                         return acc;
                       }, {} as Record<string, ExtractionMetrics>)}
-                      retryCount={retryCount}
-                      maxRetries={MAX_RETRIES}
                       onFieldEdit={setEditingField}
                       onFieldValueChange={updateFieldValue}
                       onViewFullText={(result) => setViewingFullText(result)}
@@ -630,6 +624,22 @@ export default function SearchResultsClientRefactored({
       </footer>
 
       {/* Modals */}
+      <ConfigurationDialog
+        show={showConfigDialog}
+        configurations={configurations}
+        currentConfig={currentConfig}
+        userId={userId}
+        onClose={() => setShowConfigDialog(false)}
+        onConfigChange={(config) => {
+          setCurrentConfig(config);
+          setSelectedConfig(config.id);
+          setCustomFields(config.fields.filter(f => f.enabled));
+        }}
+        onFieldsUpdate={(fields) => {
+          setCustomFields(fields.filter(f => f.enabled));
+        }}
+      />
+      
       <ConfigurationDialog
         show={showConfigDialog}
         configurations={configurations}
@@ -694,6 +704,7 @@ export default function SearchResultsClientRefactored({
           provider={aiProvider}
           model={aiModel}
           onFetchFullText={() => processWork(viewingFullText, [])}
+          metrics={getExtractionMetrics(viewingFullText.id)}
           onClose={() => setViewingFullText(null)}
         />
       )}
