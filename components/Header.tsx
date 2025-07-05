@@ -2,14 +2,17 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import { UserMenu } from '@/components/UserMenu'
+import { ComingSoonModal } from '@/components/ComingSoonModal'
 import { useAuth } from '@/lib/auth-context'
 
 export function Header() {
   const { user, loading } = useAuth()
   const router = useRouter()
+  const [showComingSoonModal, setShowComingSoonModal] = useState(false)
 
   return (
     <>
@@ -18,7 +21,12 @@ export function Header() {
         <div className="max-w-7xl mx-auto flex items-center gap-2">
           <span className="text-gray-600">🇺🇸</span>
           <span>An open-source alternative to AI research platforms like Elicit, Consensus, Scite.</span>
-          <a href="#" className="text-blue-600 hover:underline ml-2">Here's how you deploy →</a>
+          <button 
+            onClick={() => setShowComingSoonModal(true)}
+            className="text-blue-600 hover:underline ml-2"
+          >
+            Here's how you deploy →
+          </button>
         </div>
       </div>
 
@@ -58,6 +66,11 @@ export function Header() {
           </div>
         </div>
       </header>
+      
+      <ComingSoonModal 
+        isOpen={showComingSoonModal}
+        onClose={() => setShowComingSoonModal(false)}
+      />
     </>
   )
 } 

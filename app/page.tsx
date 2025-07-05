@@ -56,8 +56,8 @@ export default function LandingPage() {
               OpenPaper Grid®
             </h2>
             <p className="text-lg text-blue-50">
-              Self-hosted agent combining OpenAlex metadata with full-text extraction and LLM-powered summarization. 
-              Build custom extraction pipelines, chat with papers, and generate evidence-backed insights instantly.
+              Search 250M+ biomedical papers with AI-powered analysis. Extract structured data, 
+              chat with full-text PDFs, and accelerate your literature reviews—all in one open-source platform.
             </p>
           </div>
           

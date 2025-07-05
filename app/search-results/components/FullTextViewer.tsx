@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { X, FileText, Brain, CheckCircle, AlertCircle, Loader2, BarChart3 } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, FileText, Brain, CheckCircle, AlertCircle, Loader2, BarChart3, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CustomField } from '@/lib/database.types';
-import { ExtractionMetrics } from '../types';
+import { SearchResult, ExtractionMetrics } from '../types';
+import { ExtractionState } from '../hooks/useFullTextExtraction';
+import { useChat } from 'ai/react';
 
 interface FullTextViewerProps {
   result: SearchResult;
@@ -13,8 +15,11 @@ interface FullTextViewerProps {
     response?: any;
   }>;
   metrics?: ExtractionMetrics;
+  extractionState?: ExtractionState;
+  provider: string;
+  model: string;
+  onFetchFullText?: () => void;
   onClose: () => void;
-  onRunConfidenceScoring?: () => void;
 }
 
 export const FullTextViewer: React.FC<FullTextViewerProps> = ({
@@ -23,10 +28,13 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
   sections,
   extractionPrompts,
   metrics,
-  onClose,
-  onRunConfidenceScoring
+  extractionState,
+  provider,
+  model,
+  onFetchFullText,
+  onClose
 }) => {
-  const [activeTab, setActiveTab] = useState<'source' | 'extractions' | 'confidence'>('source');
+  const [activeTab, setActiveTab] = useState<'info' | 'source' | 'extractions' | 'confidence' | 'chat'>('info');
   const [expandedFields, setExpandedFields] = useState<Record<string, boolean>>({});
   const [confidenceScores, setConfidenceScores] = useState<Record<string, number>>({});
   const [confidenceAnalysis, setConfidenceAnalysis] = useState<any>(null);
@@ -37,7 +45,6 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
     setExpandedFields(prev => ({ ...prev, [fieldId]: !prev[fieldId] }));
   };
 
-  // Determine what text was used for extraction
   const isAbstractMode = metrics?.abstractSource !== 'fulltext';
   const sourceText = isAbstractMode 
     ? sections?.abstract || fullText?.substring(0, 1000) || ''
@@ -64,12 +71,10 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
     setScoringInProgress(true);
     
     try {
-      // Prepare source text based on extraction mode
       const sourceTextForAnalysis = isAbstractMode
-        ? `Title: ${sections?.title || title}\n\nAbstract: ${sourceText}`
+        ? `Title: ${result.title}\n\nAbstract: ${sourceText}`
         : sourceText;
       
-      // Prepare extracted fields for analysis
       const extractedFields = extractionPrompts.map(prompt => ({
         fieldId: prompt.field.id,
         name: prompt.field.name,
@@ -85,7 +90,7 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
         body: JSON.stringify({
           sourceText: sourceTextForAnalysis,
           extractedFields,
-          provider: 'openrouter', // Could be made configurable
+          provider: 'openrouter',
           model: 'openrouter/cypher-alpha:free'
         })
       });
@@ -97,7 +102,6 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
       const data = await response.json();
       const { analysis } = data;
       
-      // Convert field scores to our format
       const scores: Record<string, number> = {};
       analysis.fieldScores.forEach((score: any) => {
         scores[score.fieldId] = score.confidence;
@@ -108,26 +112,38 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
       
     } catch (error) {
       console.error('Confidence scoring error:', error);
-      // Could show error message to user
     } finally {
       setScoringInProgress(false);
     }
   };
 
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+  } = useChat({
+    api: '/api/ai/chat',
+    body: {
+      workId: result.id,
+      fullText,
+      provider,
+      model
+    }
+  });
+
   return (
     <>
-      {/* Backdrop */}
       <div 
         className="fixed inset-0 bg-black bg-opacity-50 z-40"
         onClick={onClose}
       />
       
-      {/* Modal */}
       <div className="fixed inset-y-0 right-0 w-2/3 bg-white shadow-2xl z-50 flex flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between p-4 border-b bg-gray-50">
         <div className="flex-1 pr-4">
-          <h2 className="text-lg font-semibold truncate">{title}</h2>
+          <h2 className="text-lg font-semibold truncate">{result.title}</h2>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-sm text-gray-600">Extraction Source:</span>
             <span className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
@@ -155,11 +171,21 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
         </Button>
       </div>
 
-      {/* Tabs */}
       <div className="flex border-b bg-white">
         <button
+          onClick={() => setActiveTab('info')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'info' 
+              ? 'border-blue-600 text-blue-600' 
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <FileText className="h-4 w-4" />
+          Info
+        </button>
+        <button
           onClick={() => setActiveTab('source')}
-          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'source' 
               ? 'border-blue-600 text-blue-600' 
               : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -170,7 +196,7 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('extractions')}
-          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'extractions' 
               ? 'border-blue-600 text-blue-600' 
               : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -186,7 +212,7 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('confidence')}
-          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'confidence' 
               ? 'border-blue-600 text-blue-600' 
               : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -195,19 +221,40 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
           <BarChart3 className="h-4 w-4" />
           Confidence Analysis
         </button>
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'chat'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <MessageCircle className="h-4 w-4" />
+          Chat
+        </button>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'source' && (
-          <div className="p-6">
-            {sections?.title && (
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">Title</h3>
-                <p className="text-base text-gray-900">{sections.title}</p>
+        {activeTab === 'info' && (
+          <div className="p-6 space-y-4">
+            <div className="text-sm text-gray-700">
+              <span className="font-medium">Authors:</span>{' '}
+              {result.authorships?.map(a => a.author.display_name).join(', ') || 'N/A'}
+            </div>
+            <div className="text-sm text-gray-700">
+              <span className="font-medium">Journal:</span>{' '}
+              {result.primary_location?.source?.display_name || 'Unknown'} ({result.publication_year})
+            </div>
+            {(sections?.abstract || result.abstract) && (
+              <div>
+                <h3 className="text-sm font-medium mb-1">Abstract</h3>
+                <pre className="whitespace-pre-wrap text-sm text-gray-700">{sections?.abstract || result.abstract}</pre>
               </div>
             )}
-            
+          </div>
+        )}
+        {activeTab === 'source' && (
+          <div className="p-6">
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2">
                 {isAbstractMode ? 'Abstract' : 'Full Text'}
@@ -218,98 +265,76 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
                 </pre>
               </div>
             </div>
-
-            {!isAbstractMode && sections && Object.keys(sections).length > 0 && (
-              <div className="mt-6 space-y-4">
-                <h3 className="text-sm font-semibold text-gray-700">Extracted Sections</h3>
-                {Object.entries(sections).map(([sectionName, content]) => (
-                  sectionName !== 'title' && sectionName !== 'abstract' && (
-                    <details key={sectionName} className="border rounded-lg">
-                      <summary className="px-4 py-2 cursor-pointer hover:bg-gray-50 font-medium capitalize">
-                        {sectionName}
-                      </summary>
-                      <div className="p-4 pt-0">
-                        <pre className="whitespace-pre-wrap text-sm text-gray-700">
-                          {content}
-                        </pre>
-                      </div>
-                    </details>
-                  )
-                ))}
-              </div>
-            )}
           </div>
         )}
-
         {activeTab === 'extractions' && (
-          <div className="p-6">
-            {extractionPrompts && extractionPrompts.length > 0 ? (
-              <div className="space-y-4">
-                {extractionPrompts.map((item) => (
-                  <div key={item.field.id} className="border rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => toggleField(item.field.id)}
-                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="font-medium text-gray-900">{item.field.name}</span>
-                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                          {item.field.type}
-                        </span>
-                        {item.response && (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {item.response?.confidence && (
-                          <span className="text-sm text-gray-600">
-                            {Math.round(item.response.confidence * 100)}% confidence
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                    
-                    {expandedFields[item.field.id] && item.response && (
-                      <div className="px-4 pb-4 space-y-3 bg-gray-50">
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-700 mb-1">Extracted Value:</h4>
-                          <div className="bg-white p-3 rounded border">
-                            {typeof item.response.value === 'object' 
-                              ? <pre className="text-sm">{JSON.stringify(item.response.value, null, 2)}</pre>
-                              : <p className="text-sm">{String(item.response.value)}</p>
-                            }
-                          </div>
-                        </div>
-                        
-                        {item.response.citations && item.response.citations.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-1">Supporting Evidence:</h4>
-                            <div className="space-y-2">
-                              {item.response.citations.map((citation: any, idx: number) => (
-                                <div key={idx} className="bg-white p-3 rounded border text-sm">
-                                  <p className="text-gray-700 italic">"{citation.text}"</p>
-                                  {citation.location && (
-                                    <p className="text-xs text-gray-500 mt-1">— {citation.location}</p>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500">
-                <Brain className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                <p>No fields have been extracted yet</p>
-              </div>
-            )}
-          </div>
+           <div className="p-6">
+           {extractionPrompts && extractionPrompts.length > 0 ? (
+             <div className="space-y-4">
+               {extractionPrompts.map((item) => (
+                 <div key={item.field.id} className="border rounded-lg overflow-hidden">
+                   <button
+                     onClick={() => toggleField(item.field.id)}
+                     className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                   >
+                     <div className="flex items-center gap-3">
+                       <span className="font-medium text-gray-900">{item.field.name}</span>
+                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                         {item.field.type}
+                       </span>
+                       {item.response && (
+                         <CheckCircle className="h-4 w-4 text-green-600" />
+                       )}
+                     </div>
+                     <div className="flex items-center gap-2">
+                       {item.response?.confidence && (
+                         <span className="text-sm text-gray-600">
+                           {Math.round(item.response.confidence * 100)}% confidence
+                         </span>
+                       )}
+                     </div>
+                   </button>
+                   
+                   {expandedFields[item.field.id] && item.response && (
+                     <div className="px-4 pb-4 space-y-3 bg-gray-50">
+                       <div>
+                         <h4 className="text-sm font-medium text-gray-700 mb-1">Extracted Value:</h4>
+                         <div className="bg-white p-3 rounded border">
+                           {typeof item.response.value === 'object' 
+                             ? <pre className="text-sm">{JSON.stringify(item.response.value, null, 2)}</pre>
+                             : <p className="text-sm">{String(item.response.value)}</p>
+                           }
+                         </div>
+                       </div>
+                       
+                       {item.response.citations && item.response.citations.length > 0 && (
+                         <div>
+                           <h4 className="text-sm font-medium text-gray-700 mb-1">Supporting Evidence:</h4>
+                           <div className="space-y-2">
+                             {item.response.citations.map((citation: any, idx: number) => (
+                               <div key={idx} className="bg-white p-3 rounded border text-sm">
+                                 <p className="text-gray-700 italic">"{citation.text}"</p>
+                                 {citation.location && (
+                                   <p className="text-xs text-gray-500 mt-1">— {citation.location}</p>
+                                 )}
+                               </div>
+                             ))}
+                           </div>
+                         </div>
+                       )}
+                     </div>
+                   )}
+                 </div>
+               ))}
+             </div>
+           ) : (
+             <div className="text-center py-12 text-gray-500">
+               <Brain className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+               <p>No fields have been extracted yet</p>
+             </div>
+           )}
+         </div>
         )}
-
         {activeTab === 'confidence' && (
           <div className="p-6">
             <div className="mb-6 p-4 bg-blue-50 rounded-lg">
@@ -447,6 +472,40 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
                   );
                 })}
               </div>
+            )}
+          </div>
+        )}
+        {activeTab === 'chat' && (
+          <div className="p-6 flex flex-col h-full">
+            {!fullText ? (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-600">Full text is required for chat.</p>
+                <Button onClick={onFetchFullText} disabled={extractionState?.status === 'fetching' || extractionState?.status === 'extracting'}>
+                  {extractionState?.status === 'fetching' || extractionState?.status === 'extracting' ? 'Fetching Full Text...' : 'Fetch Full Text'}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto space-y-2 mb-2">
+                  {messages.map((m, i) => (
+                    <div
+                      key={i}
+                      className={`p-2 rounded ${m.role === 'user' ? 'bg-blue-50 text-right' : 'bg-gray-100'}`}
+                    >
+                      {m.content}
+                    </div>
+                  ))}
+                </div>
+                <form onSubmit={handleSubmit} className="flex gap-2">
+                  <input
+                    value={input}
+                    onChange={handleInputChange}
+                    className="flex-1 border rounded px-3 py-2 text-sm"
+                    placeholder="Ask a question..."
+                  />
+                  <Button type="submit" disabled={isLoading || !input}>Send</Button>
+                </form>
+              </>
             )}
           </div>
         )}
