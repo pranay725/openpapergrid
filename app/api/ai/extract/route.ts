@@ -186,8 +186,40 @@ export async function POST(request: NextRequest) {
               prompt,
               schema: z.object(
                 fields.reduce((acc: Record<string, any>, field: any) => {
+                  // Create proper schema based on field type
+                  let valueSchema;
+                  switch (field.type) {
+                    case 'text':
+                      valueSchema = z.string();
+                      break;
+                    case 'number':
+                      valueSchema = z.number();
+                      break;
+                    case 'boolean':
+                      valueSchema = z.boolean();
+                      break;
+                    case 'select':
+                      valueSchema = field.options && field.options.length > 0 
+                        ? z.enum(field.options as [string, ...string[]]) 
+                        : z.string();
+                      break;
+                    case 'multi_select':
+                      valueSchema = field.options && field.options.length > 0
+                        ? z.array(z.enum(field.options as [string, ...string[]]))
+                        : z.array(z.string());
+                      break;
+                    case 'date':
+                      valueSchema = z.string(); // ISO date string
+                      break;
+                    case 'url':
+                      valueSchema = z.string(); // Just string, not strict URL validation
+                      break;
+                    default:
+                      valueSchema = z.string(); // Fallback to string
+                  }
+                  
                   acc[field.id] = z.object({
-                    value: z.any(),
+                    value: valueSchema,
                     confidence: z.number().min(0).max(1),
                     citations: z.array(z.object({
                       text: z.string(),
