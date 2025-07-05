@@ -27,6 +27,7 @@ export interface SearchResult {
   id: string;
   title: string;
   abstract?: string;
+  abstract_inverted_index?: Record<string, number[]>;
   doi?: string;
   ids?: {
     pmid?: string;
@@ -41,6 +42,9 @@ export interface SearchResult {
   }>;
   publication_year?: number;
   primary_location?: {
+    is_oa?: boolean;
+    landing_page_url?: string;
+    pdf_url?: string;
     source?: {
       display_name: string;
     };
@@ -65,6 +69,48 @@ export interface AIResponse {
   citations: Array<{
     text: string;
     location: string;
+  }>;
+}
+
+export interface ExtractionMetrics {
+  // Timing
+  startTime: number;
+  endTime: number;
+  duration: number;
+  
+  // Source information
+  abstractSource: 'openalex' | 'openalex_inverted' | 'scraped' | 'fulltext';
+  abstractLength?: number;
+  fullTextLength?: number;
+  fullTextSource?: 'pmc' | 'pdf' | 'firecrawl';  // Source of full text when in fulltext mode
+  
+  // Scraping details (if applicable)
+  scrapingDuration?: number;
+  scrapedFrom?: string;
+  
+  // AI Processing
+  model: string;
+  provider: string;
+  chunksProcessed?: number;
+  totalChunks?: number;
+  
+  // Token usage
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  
+  // Cost estimation
+  estimatedCost?: number;
+  costBreakdown?: {
+    input: number;
+    output: number;
+  };
+  
+  // Field-specific metrics
+  fieldMetrics?: Record<string, {
+    tokens?: number;
+    duration?: number;
+    confidence: number;
   }>;
 }
 

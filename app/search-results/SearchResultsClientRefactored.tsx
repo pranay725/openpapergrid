@@ -6,7 +6,6 @@ import { Header } from '@/components/Header';
 import { Logo } from '@/components/Logo';
 import { SearchHeader } from './components/SearchHeader';
 import { ResultsTable } from './components/ResultsTable';
-import { ConfigurationBar } from './components/ConfigurationManagement/ConfigurationBar';
 import { AddFieldDialog } from './components/FieldManagement/AddFieldDialog';
 import { HeaderSkeleton, ResultSkeleton } from './components/Skeletons';
 import { FilterSidebar } from './components/FilterSidebar';
@@ -16,15 +15,15 @@ import { useSearchResults } from './hooks/useSearchResults';
 import { useAIResponses } from './hooks/useAIResponses';
 import { useFullTextExtraction } from './hooks/useFullTextExtraction';
 import { buildFilterUrl } from './utils/filterHelpers';
-import type { SearchResultsClientProps, SearchFilters, SearchResult } from './types';
-import { CustomField } from '@/lib/database.types';
+import type { SearchResultsClientProps, SearchFilters, SearchResult, ExtractionMetrics } from './types';
+import { CustomField, ScreeningConfiguration } from '@/lib/database.types';
 import { 
   setActiveConfiguration, 
   updateConfiguration
 } from '@/lib/screening-config-api';
-import { AIProviderSelector } from './components/AIProviderSelector';
-import { ExtractButton } from './components/ExtractButton';
 import { FullTextViewer } from './components/FullTextViewer';
+import { InlineExtractionControls, ExtractionMode } from './components/InlineExtractionControls';
+import { ConfigurationDialog } from './components/ConfigurationManagement/ConfigurationDialog';
 
 export default function SearchResultsClientRefactored({ 
   configurations, 
@@ -47,10 +46,12 @@ export default function SearchResultsClientRefactored({
   const [selectedConfig, setSelectedConfig] = useState<string>(activeConfig?.id || '');
   const [showAddFieldDialog, setShowAddFieldDialog] = useState(false);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
+  const [showConfigDialog, setShowConfigDialog] = useState(false);
   const [editingField, setEditingField] = useState<CustomField | null>(null);
   const [aiProvider, setAIProvider] = useState('openrouter');
-  const [aiModel, setAIModel] = useState('anthropic/claude-3.5-sonnet');
+  const [aiModel, setAIModel] = useState('openrouter/cypher-alpha:free');
   const [viewingFullText, setViewingFullText] = useState<SearchResult | null>(null);
+  const [extractionMode, setExtractionMode] = useState<ExtractionMode>('abstract');
 
   // Custom hooks
   const { filters, pendingFilters, counts, actions } = useSearchFilters({
@@ -92,7 +93,8 @@ export default function SearchResultsClientRefactored({
     getExtractionState, 
     extractionStates,
     getFullTextData,
-    getExtractionPrompts
+    getExtractionPrompts,
+    getExtractionMetrics
   } = useFullTextExtraction({
     onFieldExtracted: (workId, fieldId, response) => {
       // Update the full AI response
@@ -117,7 +119,8 @@ export default function SearchResultsClientRefactored({
       }
     },
     provider: aiProvider,
-    model: aiModel
+    model: aiModel,
+    mode: extractionMode
   });
 
   // Update custom fields when config changes
@@ -175,7 +178,7 @@ export default function SearchResultsClientRefactored({
   const handleConfigChange = async (configId: string) => {
     if (configId === 'custom') {
       // Handle custom configuration creation
-      setShowAddFieldDialog(true);
+      setShowConfigDialog(true);
       return;
     }
 
@@ -192,13 +195,7 @@ export default function SearchResultsClientRefactored({
   };
 
   const handleAddColumn = () => {
-    if (currentConfig?.visibility === 'default') {
-      if (confirm('You\'re using a default configuration. Would you like to create a custom configuration based on this one?')) {
-        // Create custom config logic
-      }
-    } else {
-      setShowAddFieldDialog(true);
-    }
+    setShowConfigDialog(true);
   };
 
   const handleAddField = (field: CustomField) => {
@@ -345,59 +342,52 @@ export default function SearchResultsClientRefactored({
                 {loading ? (
                   <HeaderSkeleton />
                 ) : (
-                  <div className="mb-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="text-sm text-gray-600">
-                        {totalResults.toLocaleString()} results
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">Sort by:</span>
-                        <select
-                          value={sortBy}
-                          onChange={(e) => handleSortChange(e.target.value)}
-                          className="text-sm border border-gray-300 rounded px-3 py-1 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="relevance_score:desc">Best Match</option>
-                          <option value="publication_date:desc">Most Recent</option>
-                          <option value="publication_date:asc">Oldest First</option>
-                          <option value="cited_by_count:desc">Most Cited</option>
-                          <option value="cited_by_count:asc">Least Cited</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <AIProviderSelector
-                        selectedProvider={aiProvider}
-                        selectedModel={aiModel}
-                        onProviderChange={(provider, model) => {
-                          setAIProvider(provider);
-                          setAIModel(model);
-                        }}
-                      />
-                      <ExtractButton
-                        isExtracting={Object.values(extractionStates).some(s => s.status === 'fetching' || s.status === 'extracting')}
-                        hasExtracted={Object.values(extractionStates).some(s => s.status === 'completed')}
-                        onExtract={handleExtractAll}
-                        onCancel={() => {
-                          results?.forEach(result => cancelExtraction(result.id));
-                        }}
-                        disabled={!results || results.length === 0}
-                      />
-                    </div>
-                  </div>
+                  <InlineExtractionControls
+                    // Extraction props
+                    extractionMode={extractionMode}
+                    onModeChange={setExtractionMode}
+                    selectedProvider={aiProvider}
+                    selectedModel={aiModel}
+                    onProviderChange={(provider: string, model: string) => {
+                      setAIProvider(provider);
+                      setAIModel(model);
+                    }}
+                    isExtracting={Object.values(extractionStates).some(s => s.status === 'fetching' || s.status === 'extracting')}
+                    hasExtracted={Object.values(extractionStates).some(s => s.status === 'completed')}
+                    onExtract={handleExtractAll}
+                    onCancel={() => {
+                      results?.forEach(result => cancelExtraction(result.id));
+                    }}
+                    extractDisabled={!results || results.length === 0}
+                    // Configuration props
+                    configurations={configurations}
+                    currentConfig={currentConfig}
+                    selectedConfig={selectedConfig}
+                    customFields={customFields}
+                    userId={userId}
+                    onConfigChange={handleConfigChange}
+                    onManageFields={() => setShowConfigDialog(true)}
+                    onEditConfig={(config: ScreeningConfiguration) => {
+                      setCurrentConfig(config);
+                      setSelectedConfig(config.id);
+                      setShowConfigDialog(true);
+                    }}
+                    onDeleteConfig={async (configId: string) => {
+                      try {
+                        const { deleteConfiguration } = await import('@/lib/screening-config-api');
+                        await deleteConfiguration(configId);
+                        // Refresh configurations
+                        window.location.reload();
+                      } catch (error) {
+                        alert('Failed to delete configuration');
+                      }
+                    }}
+                    // Results props
+                    totalResults={totalResults}
+                    sortBy={sortBy}
+                    onSortChange={handleSortChange}
+                  />
                 )}
-                
-                <ConfigurationBar
-                  configurations={configurations}
-                  currentConfig={currentConfig}
-                  selectedConfig={selectedConfig}
-                  customFields={customFields}
-                  userId={userId}
-                  onConfigChange={handleConfigChange}
-                  onManageFields={() => setShowFieldSettings(true)}
-                  onAddColumn={handleAddColumn}
-                  onSaveConfig={handleSaveConfig}
-                />
                 
                 {loading ? (
                   <div className="space-y-0 border-t">
@@ -413,6 +403,11 @@ export default function SearchResultsClientRefactored({
                       currentPage={currentPage}
                       aiResponses={aiResponses}
                       extractionStates={extractionStates}
+                      extractionMetrics={results.reduce((acc, result) => {
+                        const metrics = getExtractionMetrics(result.id);
+                        if (metrics) acc[result.id] = metrics;
+                        return acc;
+                      }, {} as Record<string, ExtractionMetrics>)}
                       onFieldEdit={setEditingField}
                       onFieldValueChange={updateFieldValue}
                       onViewFullText={(result) => setViewingFullText(result)}
@@ -453,31 +448,28 @@ export default function SearchResultsClientRefactored({
       </footer>
 
       {/* Modals */}
+      <ConfigurationDialog
+        show={showConfigDialog}
+        configurations={configurations}
+        currentConfig={currentConfig}
+        userId={userId}
+        onClose={() => setShowConfigDialog(false)}
+        onConfigChange={(config) => {
+          setCurrentConfig(config);
+          setSelectedConfig(config.id);
+          setCustomFields(config.fields.filter(f => f.enabled));
+        }}
+        onFieldsUpdate={(fields) => {
+          setCustomFields(fields.filter(f => f.enabled));
+        }}
+      />
+      
       <AddFieldDialog
         show={showAddFieldDialog}
         showConfigBuilder={false}
         onClose={() => setShowAddFieldDialog(false)}
         onAdd={handleAddField}
       />
-      
-      {/* Field Settings Modal */}
-      {showFieldSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold mb-4">Manage Fields</h2>
-            <p className="text-gray-600 mb-4">Enable or disable fields for your configuration.</p>
-            {/* Field management UI would go here */}
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => setShowFieldSettings(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       
       {/* Field Editor Modal */}
       {editingField && (
@@ -517,6 +509,7 @@ export default function SearchResultsClientRefactored({
           fullText={getFullTextData(viewingFullText.id)?.fullText}
           sections={getFullTextData(viewingFullText.id)?.sections}
           extractionPrompts={getExtractionPrompts(viewingFullText.id)}
+          metrics={getExtractionMetrics(viewingFullText.id)}
           onClose={() => setViewingFullText(null)}
         />
       )}

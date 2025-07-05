@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { X, FileText, Brain, Code, ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, FileText, Brain, CheckCircle, AlertCircle, Loader2, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CustomField } from '@/lib/database.types';
+import { ExtractionMetrics } from '../types';
 
 interface FullTextViewerProps {
   workId: string;
@@ -10,10 +11,11 @@ interface FullTextViewerProps {
   sections?: Record<string, string>;
   extractionPrompts?: Array<{
     field: CustomField;
-    prompt: string;
     response?: any;
   }>;
+  metrics?: ExtractionMetrics;
   onClose: () => void;
+  onRunConfidenceScoring?: () => void;
 }
 
 export const FullTextViewer: React.FC<FullTextViewerProps> = ({
@@ -22,27 +24,128 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
   fullText,
   sections,
   extractionPrompts,
-  onClose
+  metrics,
+  onClose,
+  onRunConfidenceScoring
 }) => {
-  const [activeTab, setActiveTab] = useState<'fulltext' | 'sections' | 'prompts'>('fulltext');
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [expandedPrompts, setExpandedPrompts] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState<'source' | 'extractions' | 'confidence'>('source');
+  const [expandedFields, setExpandedFields] = useState<Record<string, boolean>>({});
+  const [confidenceScores, setConfidenceScores] = useState<Record<string, number>>({});
+  const [confidenceAnalysis, setConfidenceAnalysis] = useState<any>(null);
+  const [scoringInProgress, setScoringInProgress] = useState(false);
+  const [expandedAnalysis, setExpandedAnalysis] = useState<Record<string, boolean>>({});
 
-  const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  const toggleField = (fieldId: string) => {
+    setExpandedFields(prev => ({ ...prev, [fieldId]: !prev[fieldId] }));
   };
 
-  const togglePrompt = (fieldId: string) => {
-    setExpandedPrompts(prev => ({ ...prev, [fieldId]: !prev[fieldId] }));
+  // Determine what text was used for extraction
+  const isAbstractMode = metrics?.abstractSource !== 'fulltext';
+  const sourceText = isAbstractMode 
+    ? sections?.abstract || fullText?.substring(0, 1000) || ''
+    : fullText || '';
+
+  const getSourceLabel = () => {
+    if (!metrics) return 'Unknown Source';
+    switch (metrics.abstractSource) {
+      case 'openalex': return 'OpenAlex Abstract';
+      case 'openalex_inverted': return 'OpenAlex Abstract (Reconstructed)';
+      case 'scraped': return 'Web-Scraped Abstract';
+      case 'fulltext': 
+        if (metrics.fullTextSource === 'pmc') return 'PMC Full Text';
+        if (metrics.fullTextSource === 'pdf') return 'PDF (LlamaParse)';
+        if (metrics.fullTextSource === 'firecrawl') return 'Web-Scraped Full Text';
+        return 'Full Text';
+      default: return 'Unknown Source';
+    }
+  };
+
+  const runConfidenceScoring = async () => {
+    if (!extractionPrompts || extractionPrompts.length === 0) return;
+    
+    setScoringInProgress(true);
+    
+    try {
+      // Prepare source text based on extraction mode
+      const sourceTextForAnalysis = isAbstractMode
+        ? `Title: ${sections?.title || title}\n\nAbstract: ${sourceText}`
+        : sourceText;
+      
+      // Prepare extracted fields for analysis
+      const extractedFields = extractionPrompts.map(prompt => ({
+        fieldId: prompt.field.id,
+        name: prompt.field.name,
+        type: prompt.field.type,
+        value: prompt.response?.value,
+        confidence: prompt.response?.confidence,
+        citations: prompt.response?.citations
+      }));
+      
+      const response = await fetch('/api/ai/confidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceText: sourceTextForAnalysis,
+          extractedFields,
+          provider: 'openrouter', // Could be made configurable
+          model: 'openrouter/cypher-alpha:free'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to analyze confidence');
+      }
+      
+      const data = await response.json();
+      const { analysis } = data;
+      
+      // Convert field scores to our format
+      const scores: Record<string, number> = {};
+      analysis.fieldScores.forEach((score: any) => {
+        scores[score.fieldId] = score.confidence;
+      });
+      
+      setConfidenceScores(scores);
+      setConfidenceAnalysis(analysis);
+      
+    } catch (error) {
+      console.error('Confidence scoring error:', error);
+      // Could show error message to user
+    } finally {
+      setScoringInProgress(false);
+    }
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 w-1/2 bg-white shadow-2xl z-50 flex flex-col">
+    <>
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 z-40"
+        onClick={onClose}
+      />
+      
+      {/* Modal */}
+      <div className="fixed inset-y-0 right-0 w-2/3 bg-white shadow-2xl z-50 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between p-4 border-b bg-gray-50">
         <div className="flex-1 pr-4">
           <h2 className="text-lg font-semibold truncate">{title}</h2>
-          <p className="text-sm text-gray-500">Full Text & Extraction Details</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-sm text-gray-600">Extraction Source:</span>
+            <span className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+              {getSourceLabel()}
+            </span>
+            {metrics?.scrapedFrom && (
+              <a 
+                href={metrics.scrapedFrom} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-xs text-gray-500 hover:text-blue-600"
+              >
+                (view source)
+              </a>
+            )}
+          </div>
         </div>
         <Button
           variant="outline"
@@ -55,134 +158,302 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b">
+      <div className="flex border-b bg-white">
         <button
-          onClick={() => setActiveTab('fulltext')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'fulltext' 
+          onClick={() => setActiveTab('source')}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'source' 
               ? 'border-blue-600 text-blue-600' 
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
           <FileText className="h-4 w-4" />
-          Full Text
+          {isAbstractMode ? 'Abstract Used' : 'Full Text'}
         </button>
         <button
-          onClick={() => setActiveTab('sections')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'sections' 
-              ? 'border-blue-600 text-blue-600' 
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <FileText className="h-4 w-4" />
-          Sections
-        </button>
-        <button
-          onClick={() => setActiveTab('prompts')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'prompts' 
+          onClick={() => setActiveTab('extractions')}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'extractions' 
               ? 'border-blue-600 text-blue-600' 
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
           <Brain className="h-4 w-4" />
-          AI Prompts
+          Extracted Fields
+          {extractionPrompts && extractionPrompts.length > 0 && (
+            <span className="ml-1 text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">
+              {extractionPrompts.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('confidence')}
+          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'confidence' 
+              ? 'border-blue-600 text-blue-600' 
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <BarChart3 className="h-4 w-4" />
+          Confidence Analysis
         </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {activeTab === 'fulltext' && (
-          <div className="prose prose-sm max-w-none">
-            {fullText ? (
-              <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700">
-                {fullText}
-              </pre>
-            ) : (
-              <p className="text-gray-500 italic">Full text not available</p>
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === 'source' && (
+          <div className="p-6">
+            {sections?.title && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Title</h3>
+                <p className="text-base text-gray-900">{sections.title}</p>
+              </div>
             )}
-          </div>
-        )}
+            
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                {isAbstractMode ? 'Abstract' : 'Full Text'}
+              </h3>
+              <div className="prose prose-sm max-w-none">
+                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 bg-gray-50 p-4 rounded-lg">
+                  {sourceText || 'No text available'}
+                </pre>
+              </div>
+            </div>
 
-        {activeTab === 'sections' && (
-          <div className="space-y-3">
-            {sections && Object.keys(sections).length > 0 ? (
-              Object.entries(sections).map(([sectionName, content]) => (
-                <div key={sectionName} className="border rounded-lg">
-                  <button
-                    onClick={() => toggleSection(sectionName)}
-                    className="w-full flex items-center justify-between p-3 hover:bg-gray-50"
-                  >
-                    <span className="font-medium capitalize">{sectionName}</span>
-                    {expandedSections[sectionName] ? (
-                      <ChevronDown className="h-4 w-4 text-gray-500" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-gray-500" />
-                    )}
-                  </button>
-                  {expandedSections[sectionName] && (
-                    <div className="p-3 pt-0">
-                      <pre className="whitespace-pre-wrap text-sm text-gray-700">
-                        {content}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 italic">No sections extracted</p>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'prompts' && (
-          <div className="space-y-4">
-            {extractionPrompts && extractionPrompts.length > 0 ? (
-              extractionPrompts.map((item) => (
-                <div key={item.field.id} className="border rounded-lg">
-                  <button
-                    onClick={() => togglePrompt(item.field.id)}
-                    className="w-full flex items-center justify-between p-3 hover:bg-gray-50"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{item.field.name}</span>
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {item.field.type}
-                      </span>
-                    </div>
-                    {expandedPrompts[item.field.id] ? (
-                      <ChevronDown className="h-4 w-4 text-gray-500" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-gray-500" />
-                    )}
-                  </button>
-                  {expandedPrompts[item.field.id] && (
-                    <div className="p-3 pt-0 space-y-3">
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-1">Prompt:</h4>
-                        <pre className="whitespace-pre-wrap text-xs bg-gray-50 p-3 rounded border">
-                          {item.prompt}
+            {!isAbstractMode && sections && Object.keys(sections).length > 0 && (
+              <div className="mt-6 space-y-4">
+                <h3 className="text-sm font-semibold text-gray-700">Extracted Sections</h3>
+                {Object.entries(sections).map(([sectionName, content]) => (
+                  sectionName !== 'title' && sectionName !== 'abstract' && (
+                    <details key={sectionName} className="border rounded-lg">
+                      <summary className="px-4 py-2 cursor-pointer hover:bg-gray-50 font-medium capitalize">
+                        {sectionName}
+                      </summary>
+                      <div className="p-4 pt-0">
+                        <pre className="whitespace-pre-wrap text-sm text-gray-700">
+                          {content}
                         </pre>
                       </div>
-                      {item.response && (
+                    </details>
+                  )
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'extractions' && (
+          <div className="p-6">
+            {extractionPrompts && extractionPrompts.length > 0 ? (
+              <div className="space-y-4">
+                {extractionPrompts.map((item) => (
+                  <div key={item.field.id} className="border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => toggleField(item.field.id)}
+                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="font-medium text-gray-900">{item.field.name}</span>
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          {item.field.type}
+                        </span>
+                        {item.response && (
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {item.response?.confidence && (
+                          <span className="text-sm text-gray-600">
+                            {Math.round(item.response.confidence * 100)}% confidence
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                    
+                    {expandedFields[item.field.id] && item.response && (
+                      <div className="px-4 pb-4 space-y-3 bg-gray-50">
                         <div>
-                          <h4 className="text-sm font-medium text-gray-700 mb-1">Response:</h4>
-                          <pre className="whitespace-pre-wrap text-xs bg-green-50 p-3 rounded border border-green-200">
-                            {JSON.stringify(item.response, null, 2)}
-                          </pre>
+                          <h4 className="text-sm font-medium text-gray-700 mb-1">Extracted Value:</h4>
+                          <div className="bg-white p-3 rounded border">
+                            {typeof item.response.value === 'object' 
+                              ? <pre className="text-sm">{JSON.stringify(item.response.value, null, 2)}</pre>
+                              : <p className="text-sm">{String(item.response.value)}</p>
+                            }
+                          </div>
+                        </div>
+                        
+                        {item.response.citations && item.response.citations.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700 mb-1">Supporting Evidence:</h4>
+                            <div className="space-y-2">
+                              {item.response.citations.map((citation: any, idx: number) => (
+                                <div key={idx} className="bg-white p-3 rounded border text-sm">
+                                  <p className="text-gray-700 italic">"{citation.text}"</p>
+                                  {citation.location && (
+                                    <p className="text-xs text-gray-500 mt-1">— {citation.location}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <Brain className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p>No fields have been extracted yet</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'confidence' && (
+          <div className="p-6">
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+              <h3 className="font-medium text-blue-900 mb-2">Confidence Scoring</h3>
+              <p className="text-sm text-blue-700">
+                Run an additional AI analysis to verify extraction accuracy by comparing extracted values 
+                against the source text and assigning confidence scores based on evidence strength.
+              </p>
+            </div>
+
+            {!scoringInProgress && Object.keys(confidenceScores).length === 0 && (
+              <div className="text-center py-8">
+                <Button
+                  onClick={runConfidenceScoring}
+                  className="mx-auto"
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Run Confidence Analysis
+                </Button>
+              </div>
+            )}
+
+            {scoringInProgress && (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <span className="ml-3 text-gray-600">Analyzing extraction confidence...</span>
+              </div>
+            )}
+
+            {!scoringInProgress && Object.keys(confidenceScores).length > 0 && (
+              <div className="space-y-4">
+                {confidenceAnalysis && (
+                  <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium text-gray-900">Overall Confidence</h4>
+                      <span className="text-lg font-semibold text-gray-700">
+                        {Math.round(confidenceAnalysis.overallConfidence * 100)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                      <div 
+                        className="h-2 rounded-full bg-blue-600 transition-all duration-500"
+                        style={{ width: `${confidenceAnalysis.overallConfidence * 100}%` }}
+                      />
+                    </div>
+                    {confidenceAnalysis.recommendations && confidenceAnalysis.recommendations.length > 0 && (
+                      <div className="mt-3">
+                        <h5 className="text-sm font-medium text-gray-700 mb-1">Recommendations:</h5>
+                        <ul className="text-sm text-gray-600 space-y-1">
+                          {confidenceAnalysis.recommendations.map((rec: string, idx: number) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="text-gray-400 mt-0.5">•</span>
+                              <span>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {extractionPrompts?.map(prompt => {
+                  const score = confidenceScores[prompt.field.id] || 0;
+                  const fieldAnalysis = confidenceAnalysis?.fieldScores.find((f: any) => f.fieldId === prompt.field.id);
+                  const isHighConfidence = score >= 0.8;
+                  const isMediumConfidence = score >= 0.6 && score < 0.8;
+                  const isExpanded = expandedAnalysis[prompt.field.id];
+                  
+                  return (
+                    <div key={prompt.field.id} className="border rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setExpandedAnalysis(prev => ({ ...prev, [prompt.field.id]: !prev[prompt.field.id] }))}
+                        className="w-full p-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-left">{prompt.field.name}</span>
+                          <div className="flex items-center gap-2">
+                            {isHighConfidence && <CheckCircle className="h-5 w-5 text-green-600" />}
+                            {isMediumConfidence && <AlertCircle className="h-5 w-5 text-yellow-600" />}
+                            {!isHighConfidence && !isMediumConfidence && <AlertCircle className="h-5 w-5 text-red-600" />}
+                            <span className={`font-medium ${
+                              isHighConfidence ? 'text-green-600' : 
+                              isMediumConfidence ? 'text-yellow-600' : 'text-red-600'
+                            }`}>
+                              {Math.round(score * 100)}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full transition-all duration-500 ${
+                              isHighConfidence ? 'bg-green-600' : 
+                              isMediumConfidence ? 'bg-yellow-600' : 'bg-red-600'
+                            }`}
+                            style={{ width: `${score * 100}%` }}
+                          />
+                        </div>
+                      </button>
+                      
+                      {isExpanded && fieldAnalysis && (
+                        <div className="px-4 pb-4 bg-gray-50 space-y-3">
+                          <div>
+                            <h5 className="text-sm font-medium text-gray-700 mb-1">Evidence Strength:</h5>
+                            <span className={`text-sm px-2 py-1 rounded ${
+                              fieldAnalysis.evidenceStrength === 'strong' ? 'bg-green-100 text-green-700' :
+                              fieldAnalysis.evidenceStrength === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
+                              fieldAnalysis.evidenceStrength === 'weak' ? 'bg-orange-100 text-orange-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {fieldAnalysis.evidenceStrength}
+                            </span>
+                          </div>
+                          
+                          <div>
+                            <h5 className="text-sm font-medium text-gray-700 mb-1">Analysis Reasoning:</h5>
+                            <p className="text-sm text-gray-600">{fieldAnalysis.reasoning}</p>
+                          </div>
+                          
+                          {fieldAnalysis.issues && fieldAnalysis.issues.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 mb-1">Potential Issues:</h5>
+                              <ul className="text-sm text-gray-600 space-y-1">
+                                {fieldAnalysis.issues.map((issue: string, idx: number) => (
+                                  <li key={idx} className="flex items-start gap-2">
+                                    <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                                    <span>{issue}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 italic">No extraction prompts available</p>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
       </div>
     </div>
+    </>
   );
 }; 
