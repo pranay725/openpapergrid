@@ -686,12 +686,14 @@ export default function SearchResultsClientRefactored({
       {/* Full Text Viewer */}
       {viewingFullText && (
         <FullTextViewer
-          workId={viewingFullText.id}
-          title={viewingFullText.title}
+          result={viewingFullText}
           fullText={getFullTextData(viewingFullText.id)?.fullText}
           sections={getFullTextData(viewingFullText.id)?.sections}
           extractionPrompts={getExtractionPrompts(viewingFullText.id)}
-          metrics={getExtractionMetrics(viewingFullText.id)}
+          extractionState={getExtractionState(viewingFullText.id)}
+          provider={aiProvider}
+          model={aiModel}
+          onFetchFullText={() => processWork(viewingFullText, [])}
           onClose={() => setViewingFullText(null)}
         />
       )}

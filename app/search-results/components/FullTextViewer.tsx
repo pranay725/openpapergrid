@@ -1,120 +1,66 @@
-import React, { useState, useEffect } from 'react';
-import { X, FileText, Brain, CheckCircle, AlertCircle, Loader2, BarChart3 } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, FileText, Brain, Code, ChevronDown, ChevronRight, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CustomField } from '@/lib/database.types';
-import { ExtractionMetrics } from '../types';
+import { SearchResult } from '../types';
+import { ExtractionState } from '../hooks/useFullTextExtraction';
+import { useChat } from 'ai/react';
 
 interface FullTextViewerProps {
-  workId: string;
-  title: string;
+  result: SearchResult;
   fullText?: string;
   sections?: Record<string, string>;
   extractionPrompts?: Array<{
     field: CustomField;
     response?: any;
   }>;
-  metrics?: ExtractionMetrics;
+  extractionState?: ExtractionState;
+  provider: string;
+  model: string;
+  onFetchFullText?: () => void;
   onClose: () => void;
   onRunConfidenceScoring?: () => void;
 }
 
 export const FullTextViewer: React.FC<FullTextViewerProps> = ({
-  workId,
-  title,
+  result,
   fullText,
   sections,
   extractionPrompts,
-  metrics,
-  onClose,
-  onRunConfidenceScoring
+  extractionState,
+  provider,
+  model,
+  onFetchFullText,
+  onClose
 }) => {
-  const [activeTab, setActiveTab] = useState<'source' | 'extractions' | 'confidence'>('source');
-  const [expandedFields, setExpandedFields] = useState<Record<string, boolean>>({});
-  const [confidenceScores, setConfidenceScores] = useState<Record<string, number>>({});
-  const [confidenceAnalysis, setConfidenceAnalysis] = useState<any>(null);
-  const [scoringInProgress, setScoringInProgress] = useState(false);
-  const [expandedAnalysis, setExpandedAnalysis] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState<'info' | 'fulltext' | 'sections' | 'prompts' | 'chat'>('info');
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [expandedPrompts, setExpandedPrompts] = useState<Record<string, boolean>>({});
 
   const toggleField = (fieldId: string) => {
     setExpandedFields(prev => ({ ...prev, [fieldId]: !prev[fieldId] }));
   };
 
-  // Determine what text was used for extraction
-  const isAbstractMode = metrics?.abstractSource !== 'fulltext';
-  const sourceText = isAbstractMode 
-    ? sections?.abstract || fullText?.substring(0, 1000) || ''
-    : fullText || '';
-
-  const getSourceLabel = () => {
-    if (!metrics) return 'Unknown Source';
-    switch (metrics.abstractSource) {
-      case 'openalex': return 'OpenAlex Abstract';
-      case 'openalex_inverted': return 'OpenAlex Abstract (Reconstructed)';
-      case 'scraped': return 'Web-Scraped Abstract';
-      case 'fulltext': 
-        if (metrics.fullTextSource === 'pmc') return 'PMC Full Text';
-        if (metrics.fullTextSource === 'pdf') return 'PDF (LlamaParse)';
-        if (metrics.fullTextSource === 'firecrawl') return 'Web-Scraped Full Text';
-        return 'Full Text';
-      default: return 'Unknown Source';
-    }
+  const togglePrompt = (fieldId: string) => {
+    setExpandedPrompts(prev => ({ ...prev, [fieldId]: !prev[fieldId] }));
   };
 
-  const runConfidenceScoring = async () => {
-    if (!extractionPrompts || extractionPrompts.length === 0) return;
-    
-    setScoringInProgress(true);
-    
-    try {
-      // Prepare source text based on extraction mode
-      const sourceTextForAnalysis = isAbstractMode
-        ? `Title: ${sections?.title || title}\n\nAbstract: ${sourceText}`
-        : sourceText;
-      
-      // Prepare extracted fields for analysis
-      const extractedFields = extractionPrompts.map(prompt => ({
-        fieldId: prompt.field.id,
-        name: prompt.field.name,
-        type: prompt.field.type,
-        value: prompt.response?.value,
-        confidence: prompt.response?.confidence,
-        citations: prompt.response?.citations
-      }));
-      
-      const response = await fetch('/api/ai/confidence', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceText: sourceTextForAnalysis,
-          extractedFields,
-          provider: 'openrouter', // Could be made configurable
-          model: 'openrouter/cypher-alpha:free'
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to analyze confidence');
-      }
-      
-      const data = await response.json();
-      const { analysis } = data;
-      
-      // Convert field scores to our format
-      const scores: Record<string, number> = {};
-      analysis.fieldScores.forEach((score: any) => {
-        scores[score.fieldId] = score.confidence;
-      });
-      
-      setConfidenceScores(scores);
-      setConfidenceAnalysis(analysis);
-      
-    } catch (error) {
-      console.error('Confidence scoring error:', error);
-      // Could show error message to user
-    } finally {
-      setScoringInProgress(false);
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    setMessages
+  } = useChat({
+    api: '/api/ai/chat',
+    body: {
+      workId: result.id,
+      fullText,
+      provider,
+      model
     }
-  };
+  });
 
   return (
     <>
@@ -129,23 +75,8 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b bg-gray-50">
         <div className="flex-1 pr-4">
-          <h2 className="text-lg font-semibold truncate">{title}</h2>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-sm text-gray-600">Extraction Source:</span>
-            <span className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-              {getSourceLabel()}
-            </span>
-            {metrics?.scrapedFrom && (
-              <a 
-                href={metrics.scrapedFrom} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-xs text-gray-500 hover:text-blue-600"
-              >
-                (view source)
-              </a>
-            )}
-          </div>
+          <h2 className="text-lg font-semibold truncate">{result.title}</h2>
+          <p className="text-sm text-gray-500">Publication Details</p>
         </div>
         <Button
           variant="outline"
@@ -158,12 +89,23 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b bg-white">
+      <div className="flex border-b">
         <button
-          onClick={() => setActiveTab('source')}
-          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'source' 
-              ? 'border-blue-600 text-blue-600' 
+          onClick={() => setActiveTab('info')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'info'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <FileText className="h-4 w-4" />
+          Info
+        </button>
+        <button
+          onClick={() => setActiveTab('fulltext')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'fulltext'
+              ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
@@ -187,58 +129,57 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
           )}
         </button>
         <button
-          onClick={() => setActiveTab('confidence')}
-          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'confidence' 
-              ? 'border-blue-600 text-blue-600' 
+          onClick={() => setActiveTab('prompts')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'prompts'
+              ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
-          <BarChart3 className="h-4 w-4" />
-          Confidence Analysis
+          <Brain className="h-4 w-4" />
+          AI Prompts
+        </button>
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'chat'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <MessageCircle className="h-4 w-4" />
+          Chat
         </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        {activeTab === 'source' && (
-          <div className="p-6">
-            {sections?.title && (
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">Title</h3>
-                <p className="text-base text-gray-900">{sections.title}</p>
+      <div className="flex-1 overflow-y-auto p-4">
+        {activeTab === 'info' && (
+          <div className="space-y-4">
+            <div className="text-sm text-gray-700">
+              <span className="font-medium">Authors:</span>{' '}
+              {result.authorships?.map(a => a.author.display_name).join(', ') || 'N/A'}
+            </div>
+            <div className="text-sm text-gray-700">
+              <span className="font-medium">Journal:</span>{' '}
+              {result.primary_location?.source?.display_name || 'Unknown'} ({result.publication_year})
+            </div>
+            {(sections?.abstract || result.abstract) && (
+              <div>
+                <h3 className="text-sm font-medium mb-1">Abstract</h3>
+                <pre className="whitespace-pre-wrap text-sm text-gray-700">{sections?.abstract || result.abstract}</pre>
               </div>
             )}
-            
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                {isAbstractMode ? 'Abstract' : 'Full Text'}
-              </h3>
-              <div className="prose prose-sm max-w-none">
-                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 bg-gray-50 p-4 rounded-lg">
-                  {sourceText || 'No text available'}
-                </pre>
-              </div>
-            </div>
-
-            {!isAbstractMode && sections && Object.keys(sections).length > 0 && (
-              <div className="mt-6 space-y-4">
-                <h3 className="text-sm font-semibold text-gray-700">Extracted Sections</h3>
-                {Object.entries(sections).map(([sectionName, content]) => (
-                  sectionName !== 'title' && sectionName !== 'abstract' && (
-                    <details key={sectionName} className="border rounded-lg">
-                      <summary className="px-4 py-2 cursor-pointer hover:bg-gray-50 font-medium capitalize">
-                        {sectionName}
-                      </summary>
-                      <div className="p-4 pt-0">
-                        <pre className="whitespace-pre-wrap text-sm text-gray-700">
-                          {content}
-                        </pre>
-                      </div>
-                    </details>
-                  )
-                ))}
-              </div>
+          </div>
+        )}
+        {activeTab === 'fulltext' && (
+          <div className="prose prose-sm max-w-none">
+            {fullText ? (
+              <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700">
+                {fullText}
+              </pre>
+            ) : (
+              <p className="text-gray-500 italic">Full text not available</p>
             )}
           </div>
         )}
@@ -446,9 +387,46 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
                         </div>
                       )}
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-500 italic">No extraction prompts available</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'chat' && (
+          <div className="flex flex-col h-full">
+            {!fullText ? (
+              <div className="p-3 space-y-2">
+                <p className="text-sm text-gray-600">Full text is required for chat.</p>
+                <Button onClick={onFetchFullText} disabled={extractionState?.status === 'fetching' || extractionState?.status === 'extracting'}>
+                  {extractionState?.status === 'fetching' || extractionState?.status === 'extracting' ? 'Fetching Full Text...' : 'Fetch Full Text'}
+                </Button>
               </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto space-y-2 mb-2">
+                  {messages.map((m, i) => (
+                    <div
+                      key={i}
+                      className={`p-2 rounded ${m.role === 'user' ? 'bg-blue-50 text-right' : 'bg-gray-100'}`}
+                    >
+                      {m.content}
+                    </div>
+                  ))}
+                </div>
+                <form onSubmit={handleSubmit} className="flex gap-2">
+                  <input
+                    value={input}
+                    onChange={handleInputChange}
+                    className="flex-1 border rounded px-3 py-2 text-sm"
+                    placeholder="Ask a question..."
+                  />
+                  <Button type="submit" disabled={isLoading || !input}>Send</Button>
+                </form>
+              </>
             )}
           </div>
         )}
@@ -456,4 +434,4 @@ export const FullTextViewer: React.FC<FullTextViewerProps> = ({
     </div>
     </>
   );
-}; 
+};
