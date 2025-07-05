@@ -1,9 +1,15 @@
-import { streamText } from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { anthropic } from '@ai-sdk/anthropic';
+import { streamText, generateObject } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { NextRequest } from 'next/server';
+import { 
+  createTextChunks, 
+  generateExtractionSchema,
+  generateInitialExtractionPrompt,
+  generateUpdatePrompt,
+  mergeExtractionResults,
+  EXTRACTION_CONFIGS
+} from '@/app/search-results/utils/extractionChain';
 
 // Schema for field extraction
 const FieldExtractionSchema = z.object({
@@ -27,29 +33,12 @@ const openrouter = createOpenAI({
 
 // Provider configuration
 const AI_PROVIDERS = {
-  openai: {
-    models: ['gpt-4-turbo-preview', 'gpt-4', 'gpt-3.5-turbo'],
-    getModel: (model: string) => openai(model)
-  },
-  anthropic: {
-    models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
-    getModel: (model: string) => anthropic(model)
-  },
   openrouter: {
     models: [
       'openrouter/cypher-alpha:free',
-      'anthropic/claude-3.5-sonnet',
-      'anthropic/claude-3-opus',
-      'anthropic/claude-3-sonnet',
-      'anthropic/claude-3-haiku',
-      'openai/gpt-4-turbo',
-      'openai/gpt-4',
-      'openai/gpt-3.5-turbo',
-      'google/gemini-pro-1.5',
-      'meta-llama/llama-3.1-70b-instruct',
-      'meta-llama/llama-3.1-8b-instruct',
-      'mistralai/mistral-large',
-      'deepseek/deepseek-chat'
+      'google/gemma-3n-e4b-it:free',
+      'google/gemini-2.5-flash-preview-05-20',
+      'openai/gpt-4.1'
     ],
     getModel: (model: string) => openrouter(model)
   }
@@ -63,11 +52,17 @@ function generateExtractionPrompt(
 ): string {
   const contextParts = [];
   
+  // Add title if available
+  if (sections.title) {
+    contextParts.push(`TITLE:\n${sections.title}`);
+  }
+  
   // Add relevant sections based on field type
   if (sections.abstract) {
     contextParts.push(`ABSTRACT:\n${sections.abstract}`);
   }
   
+  // Only include additional sections if they exist (fulltext mode)
   if (field.id === 'methods' || field.id === 'techniques' || field.id === 'model_system') {
     if (sections.methods) {
       contextParts.push(`METHODS:\n${sections.methods}`);
@@ -108,7 +103,7 @@ For boolean fields, return true or false.
 For text fields, be concise but complete.
 For number fields, extract the numeric value only.
 
-Respond in JSON format matching this structure:
+Respond with ONLY valid JSON (no markdown, no code blocks, no extra text) matching this structure:
 {
   "value": <extracted value>,
   "confidence": <0-1>,
@@ -125,15 +120,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { 
-      field, 
+      fields, // Now expecting array of fields instead of single field
       fullText, 
       sections = {}, 
       provider = 'openai', 
       model,
-      workId 
+      workId,
+      mode = 'fulltext' // 'abstract' or 'fulltext'
     } = body;
     
-    if (!field || !fullText || !workId) {
+    if (!fields || !fullText || !workId) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -157,43 +153,118 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Generate the extraction prompt
-    const prompt = generateExtractionPrompt(field, fullText, sections);
+    // Get extraction configuration based on mode
+    const extractionConfig = EXTRACTION_CONFIGS[mode as keyof typeof EXTRACTION_CONFIGS];
     
-    // Stream the AI response
-    const result = await streamText({
-      model: providerConfig.getModel(selectedModel),
-      prompt,
-      temperature: 0.1, // Low temperature for consistency
-      maxTokens: 500,
-    });
+    // Create text chunks
+    const chunks = createTextChunks(fullText, extractionConfig);
     
-    // Convert to text stream response with custom handling
-    const stream = result.textStream;
-    let accumulated = '';
+    // Generate JSON schema for all fields
+    const schema = generateExtractionSchema(fields);
     
-    const transformedStream = new ReadableStream({
+    // Initialize extraction results
+    let extractionResults: Record<string, any> = {};
+    
+    // Create a streaming response
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
       async start(controller) {
-        for await (const chunk of stream) {
-          accumulated += chunk;
-          controller.enqueue(new TextEncoder().encode(chunk));
-          
-          // Try to parse accumulated text as complete JSON
-          try {
-            const parsed = JSON.parse(accumulated);
-            // If we have valid JSON, we could notify about it
-          } catch (e) {
-            // Not complete JSON yet, continue
+        try {
+          // Process each chunk
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const isFirstChunk = i === 0;
+            
+            // Generate appropriate prompt
+            const prompt = isFirstChunk
+              ? generateInitialExtractionPrompt(chunk, schema, fields)
+              : generateUpdatePrompt(extractionResults, chunk, schema, fields);
+            
+            // Use generateObject for structured output
+            const result = await generateObject({
+              model: providerConfig.getModel(selectedModel),
+              prompt,
+              schema: z.object(
+                fields.reduce((acc: Record<string, any>, field: any) => {
+                  acc[field.id] = z.object({
+                    value: z.any(),
+                    confidence: z.number().min(0).max(1),
+                    citations: z.array(z.object({
+                      text: z.string(),
+                      location: z.string()
+                    }))
+                  });
+                  return acc;
+                }, {} as Record<string, any>)
+              ),
+              temperature: 0.1,
+            });
+            
+            // Capture usage data - the AI SDK returns it directly on the result
+            const usage = result.usage || (result as any).rawResponse?.usage;
+            
+            // Log for debugging
+            console.log('AI SDK Result structure:', {
+              hasUsage: !!result.usage,
+              hasRawResponse: !!(result as any).rawResponse,
+              usage: usage
+            });
+            
+            // Merge results
+            extractionResults = mergeExtractionResults(
+              extractionResults, 
+              result.object,
+              fields
+            );
+            
+            // Stream progress update with usage data
+            const progressUpdate = {
+              type: 'progress',
+              chunk: i + 1,
+              totalChunks: chunks.length,
+              currentResults: extractionResults,
+              usage: usage ? {
+                promptTokens: usage.promptTokens,
+                completionTokens: usage.completionTokens,
+                totalTokens: usage.totalTokens
+              } : undefined
+            };
+            
+            controller.enqueue(encoder.encode(
+              JSON.stringify(progressUpdate) + '\n'
+            ));
           }
+          
+          // Send final results
+          const finalUpdate = {
+            type: 'complete',
+            results: extractionResults
+          };
+          
+          controller.enqueue(encoder.encode(
+            JSON.stringify(finalUpdate) + '\n'
+          ));
+          
+        } catch (error) {
+          console.error('Extraction error:', error);
+          const errorUpdate = {
+            type: 'error',
+            error: error instanceof Error ? error.message : 'Extraction failed'
+          };
+          controller.enqueue(encoder.encode(
+            JSON.stringify(errorUpdate) + '\n'
+          ));
+        } finally {
+          controller.close();
         }
-        controller.close();
       }
     });
     
-    return new Response(transformedStream, {
+    return new Response(stream, {
       headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
       }
     });
     

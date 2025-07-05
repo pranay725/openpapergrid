@@ -13,40 +13,13 @@ export interface AIProvider {
 
 const AI_PROVIDERS: AIProvider[] = [
   {
-    id: 'openai',
-    name: 'OpenAI',
-    models: [
-      { id: 'gpt-4-turbo-preview', name: 'GPT-4 Turbo', description: 'Most capable, higher cost' },
-      { id: 'gpt-4', name: 'GPT-4', description: 'Very capable, moderate cost' },
-      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and affordable' }
-    ]
-  },
-  {
-    id: 'anthropic',
-    name: 'Anthropic',
-    models: [
-      { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Most capable' },
-      { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: 'Balanced performance' },
-      { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: 'Fast and efficient' }
-    ]
-  },
-  {
     id: 'openrouter',
     name: 'OpenRouter',
     models: [
-      { id: 'openrouter/cypher-alpha:free', name: 'Cypher Alpha', description: '🆓 Free model!' },
-      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', description: 'Latest and most capable' },
-      { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', description: 'Very capable' },
-      { id: 'anthropic/claude-3-sonnet', name: 'Claude 3 Sonnet', description: 'Balanced' },
-      { id: 'anthropic/claude-3-haiku', name: 'Claude 3 Haiku', description: 'Fast' },
-      { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo', description: 'OpenAI\'s best' },
-      { id: 'openai/gpt-4', name: 'GPT-4', description: 'Very capable' },
-      { id: 'openai/gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and cheap' },
-      { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro', description: 'Google\'s latest' },
-      { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B', description: 'Open source, large' },
-      { id: 'meta-llama/llama-3.1-8b-instruct', name: 'Llama 3.1 8B', description: 'Open source, fast' },
-      { id: 'mistralai/mistral-large', name: 'Mistral Large', description: 'European alternative' },
-      { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', description: 'Cost effective' }
+      { id: 'openrouter/cypher-alpha:free', name: 'Cypher Alpha (free)', description: '🆓 Free model' },
+      { id: 'google/gemma-3n-e4b-it:free', name: 'Google: Gemma 3n 4B (free)', description: '🆓 Free model' },
+      { id: 'google/gemini-2.5-flash-preview-05-20', name: 'Google: Gemini 2.5 Flash Preview 05-20', description: 'Latest Gemini' },
+      { id: 'openai/gpt-4.1', name: 'OpenAI: GPT-4.1', description: 'Latest GPT-4' }
     ]
   }
 ];

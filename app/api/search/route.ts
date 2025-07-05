@@ -122,7 +122,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const worksParams = new URLSearchParams({ filter, per_page: '25', page: page.toString(), sort });
+  const worksParams = new URLSearchParams({ filter, per_page: '10', page: page.toString(), sort });
   const worksUrl = `https://api.openalex.org/works?${worksParams.toString()}`;
 
   // Create multiple group_by queries for different facets
