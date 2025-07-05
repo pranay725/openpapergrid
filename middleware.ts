@@ -13,8 +13,11 @@ const PROTECTED_ROUTES = [
 const RATE_LIMITED_ROUTES = {
   '/api/search': 'search',
   '/api/ai/extract': 'abstractExtraction',
+  '/api/ai/chat': 'aiChat',
+  '/api/ai/confidence': 'aiConfidence',
   '/api/fulltext': 'fullTextExtraction',
-  '/api/scrape-abstract': 'abstractExtraction'
+  '/api/scrape-abstract': 'abstractExtraction',
+  '/api/parse': 'documentParsing'
 };
 
 export async function middleware(request: NextRequest) {

@@ -7,7 +7,7 @@ import { prepareAbstractData, prepareAbstractDataWithScraping } from '../utils/a
 
 export type ExtractionStatus = 'idle' | 'fetching' | 'extracting' | 'completed' | 'error';
 
-interface ExtractionState {
+export interface ExtractionState {
   status: ExtractionStatus;
   progress: number; // 0-100
   currentField?: string;

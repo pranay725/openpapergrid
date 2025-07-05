@@ -11,11 +11,17 @@ export const RATE_LIMITS = {
   anonymous: {
     search: { limit: 50, window: '1h', key: 'ip' as const },
     abstractExtraction: { limit: 20, window: '1h', key: 'ip' as const },
+    aiChat: { limit: 5, window: '1h', key: 'ip' as const },
+    aiConfidence: { limit: 10, window: '1h', key: 'ip' as const },
+    documentParsing: { limit: 3, window: '1h', key: 'ip' as const },
     resultsPerSearch: 50
   },
   authenticated: {
     search: { limit: 1000, window: '24h', key: 'userId' as const },
     abstractExtraction: { limit: 500, window: '24h', key: 'userId' as const },
+    aiChat: { limit: 100, window: '24h', key: 'userId' as const },
+    aiConfidence: { limit: 200, window: '24h', key: 'userId' as const },
+    documentParsing: { limit: 50, window: '24h', key: 'userId' as const },
     fullTextExtraction: { limit: 100, window: '24h', key: 'userId' as const },
     apiCalls: { limit: 10000, window: '30d', key: 'userId' as const }
   }

@@ -717,6 +717,10 @@ export default function SearchResultsClientRefactored({
           model={aiModel}
           onFetchFullText={() => processWork(viewingFullText, [])}
           metrics={getExtractionMetrics(viewingFullText.id)}
+          extractionState={getExtractionState(viewingFullText.id)}
+          provider={aiProvider}
+          model={aiModel}
+          onFetchFullText={() => processWork(viewingFullText, [])}
           onClose={() => setViewingFullText(null)}
         />
       )}
