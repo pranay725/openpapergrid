@@ -2,6 +2,8 @@ import { streamText } from 'ai';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { NextRequest } from 'next/server';
+import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { trackUsage } from '@/lib/rate-limiter';
 
 const openrouter = createOpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
