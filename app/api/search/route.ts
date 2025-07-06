@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createSupabaseServerClient, createSupabaseAdmin } from '@/lib/supabase-server';
 
 // Simple in-memory rate limit tracking
 const requestTimestamps: number[] = [];
@@ -43,6 +44,14 @@ async function fetchWithRetry(url: string, retries = 3, delay = 1000): Promise<R
   throw new Error('Max retries reached');
 }
 
+// Function to get client IP from request headers
+function getClientIp(request: Request): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  const real = request.headers.get('x-real-ip');
+  const ip = forwarded?.split(',')[0] || real || 'unknown';
+  return ip;
+}
+
 export async function GET(request: Request) {
   // Check our own rate limit first
   if (!checkRateLimit()) {
@@ -68,6 +77,16 @@ export async function GET(request: Request) {
 
   if (!query) {
     return NextResponse.json({ error: 'Query parameter is required' }, { status: 400 });
+  }
+
+  // Get user info for tracking
+  let userId: string | null = null;
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    userId = user?.id || null;
+  } catch (error) {
+    console.error('Error getting user:', error);
   }
 
   // Build filter using title_and_abstract.search
@@ -229,6 +248,33 @@ export async function GET(request: Request) {
       author_breakdown: authorData.group_by,
       journal_breakdown: journalData.group_by,
     };
+
+    // Track the search query
+    try {
+      const admin = createSupabaseAdmin();
+      await admin.from('search_queries').insert({
+        query,
+        user_id: userId,
+        ip_address: getClientIp(request),
+        filters: {
+          year,
+          topics,
+          institutions,
+          types,
+          countries,
+          authors,
+          journals,
+          textAvailability,
+          openAccess
+        },
+        result_count: worksData.meta?.count || 0,
+        page,
+        sort_by: sort
+      });
+    } catch (trackingError) {
+      console.error('Failed to track search query:', trackingError);
+      // Don't fail the request if tracking fails
+    }
 
     return NextResponse.json(responseData);
   } catch (error: any) {

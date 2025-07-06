@@ -315,6 +315,18 @@ async function extractTextWithFirecrawl(url: string): Promise<FullTextResult | n
 
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication
+    const { createSupabaseServerClient } = await import('@/lib/supabase-server');
+    const supabase = await createSupabaseServerClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required for full text extraction' },
+        { status: 401 }
+      );
+    }
+    
     const body = await request.json();
     const { pmid, doi, pdfUrl, workId, landingPageUrl } = body;
     

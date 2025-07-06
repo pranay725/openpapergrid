@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { createSupabaseClient } from './supabase'
+import { useRouter } from 'next/navigation'
 
 type AuthContextType = {
   user: User | null
@@ -21,10 +22,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createSupabaseClient()
+  const router = useRouter()
 
   useEffect(() => {
     // Get initial session
     const getInitialSession = async () => {
+      // Note: getSession() is fine for initial load and non-critical operations
+      // For security-critical operations (like accessing protected resources),
+      // use getUser() which verifies the token with Supabase Auth server
       const { data: { session } } = await supabase.auth.getSession()
       setSession(session)
       setUser(session?.user ?? null)
@@ -36,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // Note: This is safe as it comes from Supabase's auth state change
         setSession(session)
         setUser(session?.user ?? null)
         setLoading(false)
@@ -46,11 +52,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase])
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    return { error }
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      
+      if (!error) {
+        // Check for redirect URL
+        const redirectUrl = sessionStorage.getItem('redirectAfterAuth')
+        if (redirectUrl) {
+          sessionStorage.removeItem('redirectAfterAuth')
+          router.push(redirectUrl)
+        } else {
+          router.push('/')
+        }
+      }
+      
+      return { error }
+    } catch (error: any) {
+      return { error }
+    }
   }
 
   const signUp = async (email: string, password: string) => {
@@ -66,13 +88,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signInWithOAuth = async (provider: 'google' | 'github') => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
-    return { error }
+    try {
+      const redirectTo = sessionStorage.getItem('redirectAfterAuth') || `${window.location.origin}/auth/callback`
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+        },
+      })
+      return { error }
+    } catch (error: any) {
+      return { error }
+    }
   }
 
   const value = {

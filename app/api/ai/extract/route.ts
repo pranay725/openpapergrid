@@ -118,6 +118,17 @@ Respond with ONLY valid JSON (no markdown, no code blocks, no extra text) matchi
 
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication
+    const { createSupabaseServerClient } = await import('@/lib/supabase-server');
+    const supabase = await createSupabaseServerClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    // Track usage
+    if (session?.user?.id) {
+      const { trackUsage } = await import('@/lib/rate-limiter');
+      await trackUsage(session.user.id, 'abstract_extractions');
+    }
+    
     const body = await request.json();
     const { 
       fields, // Now expecting array of fields instead of single field
@@ -128,6 +139,14 @@ export async function POST(request: NextRequest) {
       workId,
       mode = 'fulltext' // 'abstract' or 'fulltext'
     } = body;
+    
+    // If full text mode and not authenticated, reject
+    if (mode === 'fulltext' && !session) {
+      return new Response(
+        JSON.stringify({ error: 'Authentication required for full text extraction' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
     
     if (!fields || !fullText || !workId) {
       return new Response(

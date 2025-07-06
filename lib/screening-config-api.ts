@@ -44,6 +44,19 @@ export async function getScreeningConfigurations() {
 export async function getActiveConfiguration(userId: string) {
   const supabase = await createSupabaseServerClient()
   
+  // If no userId provided (anonymous user), return default config
+  if (!userId) {
+    const { data: defaultConfig, error: defaultError } = await supabase
+      .from('screening_configurations')
+      .select('*')
+      .eq('visibility', 'default')
+      .eq('name', 'Basic Screening')
+      .single()
+
+    if (defaultError && defaultError.code !== 'PGRST116') throw defaultError
+    return defaultConfig ? rowToScreeningConfig(defaultConfig) : null
+  }
+  
   // First get the active configuration ID
   const { data: activeConfig, error: activeError } = await supabase
     .from('user_active_configuration')
