@@ -100,6 +100,29 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Add CORS headers for API routes
+  if (path.startsWith('/api/')) {
+    const origin = request.headers.get('origin');
+    const allowedOrigins = [
+      process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+      'https://openpapergrid.com', // Add your production domain
+      'https://www.openpapergrid.com' // Add www subdomain if used
+    ].filter(Boolean);
+
+    // Check if origin is allowed
+    if (origin && allowedOrigins.includes(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+      response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    }
+
+    // Handle preflight requests
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 200, headers: response.headers });
+    }
+  }
+
   return response
 }
 
