@@ -24,6 +24,7 @@ import {
 import { FullTextViewer } from './components/FullTextViewer';
 import { InlineExtractionControls, ExtractionMode } from './components/InlineExtractionControls';
 import { ConfigurationDialog } from './components/ConfigurationManagement/ConfigurationDialog';
+import { UsageLimitIndicator } from './components/UsageLimitIndicator';
 
 export default function SearchResultsClientRefactored({ 
   configurations, 
@@ -118,6 +119,7 @@ export default function SearchResultsClientRefactored({
   const [aiModel, setAIModel] = useState('openrouter/cypher-alpha:free');
   const [viewingFullText, setViewingFullText] = useState<SearchResult | null>(null);
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('abstract');
+  const [hasAutoExtracted, setHasAutoExtracted] = useState(false);
   
   // Track previous extraction mode
   const prevExtractionModeRef = useRef(extractionMode);
@@ -524,7 +526,7 @@ export default function SearchResultsClientRefactored({
                   <InlineExtractionControls
                     // Extraction props
                     extractionMode={extractionMode}
-                    onModeChange={setExtractionMode}
+                    onModeChange={handleExtractionModeChange}
                     selectedProvider={aiProvider}
                     selectedModel={aiModel}
                     onProviderChange={(provider: string, model: string) => {
@@ -565,6 +567,8 @@ export default function SearchResultsClientRefactored({
                     totalResults={totalResults}
                     sortBy={sortBy}
                     onSortChange={handleSortChange}
+                    // Auth
+                    isAuthenticated={isAuthenticated}
                   />
                 )}
                 

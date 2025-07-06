@@ -162,6 +162,14 @@ export async function POST(request: NextRequest) {
       mode = 'fulltext' // 'abstract' or 'fulltext'
     } = body;
     
+    // If full text mode and not authenticated, reject
+    if (mode === 'fulltext' && !session) {
+      return new Response(
+        JSON.stringify({ error: 'Authentication required for full text extraction' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
     if (!fields || !fullText || !workId) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields' }),
