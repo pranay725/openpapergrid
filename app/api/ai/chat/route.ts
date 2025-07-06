@@ -81,9 +81,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Limit context size for anonymous users to reduce costs
+    const contextLimit = userId ? 12000 : 6000;
+    const maxTokens = userId ? 500 : 250;
+
     const systemMessage = {
       role: 'system',
-      content: `You are a helpful research assistant answering questions about the following paper. Use the text to provide accurate answers in Markdown.\n\n${fullText.substring(0, 12000)}`
+      content: `You are a helpful research assistant answering questions about the following paper. Use the text to provide accurate answers in Markdown.\n\n${fullText.substring(0, contextLimit)}`
     };
 
     const chatMessages = [systemMessage, ...messages];
@@ -92,7 +96,7 @@ export async function POST(request: NextRequest) {
       model: providerConfig.getModel(selectedModel),
       messages: chatMessages,
       temperature: 0.2,
-      maxTokens: 500
+      maxTokens: maxTokens
     });
 
     return new Response(result.textStream, {
