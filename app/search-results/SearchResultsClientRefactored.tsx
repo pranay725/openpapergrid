@@ -24,6 +24,7 @@ import {
 import { FullTextViewer } from './components/FullTextViewer';
 import { InlineExtractionControls, ExtractionMode } from './components/InlineExtractionControls';
 import { ConfigurationDialog } from './components/ConfigurationManagement/ConfigurationDialog';
+import { UsageLimitIndicator } from './components/UsageLimitIndicator';
 
 export default function SearchResultsClientRefactored({ 
   configurations, 
@@ -32,18 +33,82 @@ export default function SearchResultsClientRefactored({
 }: SearchResultsClientProps) {
   const searchParams = useSearchParams();
 
+  // Check authentication status
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [usageData, setUsageData] = useState<{ searches: number; extractions: number }>({ searches: 0, extractions: 0 });
+  
+  useEffect(() => {
+    // Check if user is authenticated
+    const checkAuth = async () => {
+      const { createSupabaseClient } = await import('@/lib/supabase');
+      const supabase = createSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsAuthenticated(!!session);
+      
+      // Track anonymous usage in localStorage
+      if (!session) {
+        const storedUsage = localStorage.getItem('anonymousUsage');
+        if (storedUsage) {
+          setUsageData(JSON.parse(storedUsage));
+        }
+      }
+    };
+    checkAuth();
+  }, []);
+
+  // Track search usage
+  const trackSearchUsage = () => {
+    if (!isAuthenticated) {
+      const newUsage = { ...usageData, searches: usageData.searches + 1 };
+      setUsageData(newUsage);
+      localStorage.setItem('anonymousUsage', JSON.stringify(newUsage));
+    }
+  };
+
+  // Track extraction usage
+  const trackExtractionUsage = () => {
+    if (!isAuthenticated) {
+      const newUsage = { ...usageData, extractions: usageData.extractions + 1 };
+      setUsageData(newUsage);
+      localStorage.setItem('anonymousUsage', JSON.stringify(newUsage));
+    }
+  };
+
+  // Reset usage data daily
+  useEffect(() => {
+    if (!isAuthenticated) {
+      const storedUsage = localStorage.getItem('anonymousUsage');
+      const lastReset = localStorage.getItem('anonymousUsageLastReset');
+      const today = new Date().toDateString();
+      
+      if (lastReset !== today) {
+        // Reset usage for new day
+        const resetUsage = { searches: 0, extractions: 0 };
+        setUsageData(resetUsage);
+        localStorage.setItem('anonymousUsage', JSON.stringify(resetUsage));
+        localStorage.setItem('anonymousUsageLastReset', today);
+      } else if (storedUsage) {
+        // Load existing usage
+        setUsageData(JSON.parse(storedUsage));
+      }
+    }
+  }, [isAuthenticated]);
+
   // Parse initial values from URL
   const initialQuery = searchParams.get('query') || '';
   const initialPage = parseInt(searchParams.get('page') || '1');
   const initialSort = searchParams.get('sort') || 'relevance_score:desc';
 
-  // State
+  // Find Basic Screening configuration
+  const basicScreeningConfig = configurations.find(c => c.name === 'Basic Screening' && c.visibility === 'default');
+  
+  // State - Set Basic Screening as default for non-authenticated users
   const [query, setQuery] = useState(initialQuery);
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [sortBy, setSortBy] = useState(initialSort);
-  const [currentConfig, setCurrentConfig] = useState(activeConfig);
-  const [customFields, setCustomFields] = useState<CustomField[]>(activeConfig?.fields || []);
-  const [selectedConfig, setSelectedConfig] = useState<string>(activeConfig?.id || '');
+  const [currentConfig, setCurrentConfig] = useState(activeConfig || basicScreeningConfig || configurations[0]);
+  const [customFields, setCustomFields] = useState<CustomField[]>((activeConfig || basicScreeningConfig)?.fields || []);
+  const [selectedConfig, setSelectedConfig] = useState<string>((activeConfig || basicScreeningConfig)?.id || '');
   const [showAddFieldDialog, setShowAddFieldDialog] = useState(false);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [showConfigDialog, setShowConfigDialog] = useState(false);
@@ -52,6 +117,7 @@ export default function SearchResultsClientRefactored({
   const [aiModel, setAIModel] = useState('openrouter/cypher-alpha:free');
   const [viewingFullText, setViewingFullText] = useState<SearchResult | null>(null);
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('abstract');
+  const [hasAutoExtracted, setHasAutoExtracted] = useState(false);
   
   // Track previous extraction mode
   const prevExtractionModeRef = useRef(extractionMode);
@@ -170,20 +236,46 @@ export default function SearchResultsClientRefactored({
     }
   }, [query, previousQuery, results, clearResultResponses]);
 
+  // Handle rate limit errors
+  useEffect(() => {
+    if (error && (error.includes('rate limit') || error.includes('Rate limit'))) {
+      // Redirect to signup page with a message
+      window.location.href = '/auth/signup?message=rate_limit_exceeded&redirect=' + encodeURIComponent(window.location.href);
+    }
+  }, [error]);
+
   // Initial fetch
   useEffect(() => {
     fetchResults(initialQuery, filters, initialPage, initialSort);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
 
-  const handleSearch = () => {
-    const newQuery = query.trim();
-    if (newQuery) {
-      setCurrentPage(1);
-      const url = buildFilterUrl(newQuery, filters, 1, sortBy);
-      window.history.pushState({}, '', url);
-      fetchResults(newQuery, filters, 1, sortBy);
+  // Auto-extract for non-authenticated users to show the AHA moment
+  useEffect(() => {
+    if (!isAuthenticated && results && results.length > 0 && !hasAutoExtracted && !loading) {
+      // Small delay to ensure UI is ready
+      const timer = setTimeout(() => {
+        handleExtractAll();
+        setHasAutoExtracted(true);
+      }, 500);
+      return () => clearTimeout(timer);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, results, hasAutoExtracted, loading]); // Exclude handleExtractAll to prevent loops
+
+  const handleSearch = () => {
+    if (!query.trim()) return;
+
+    trackSearchUsage(); // Track usage
+    
+    const params = new URLSearchParams({
+      query: query,
+      page: currentPage.toString(),
+      sort: sortBy
+    });
+    const url = buildFilterUrl(query, filters, currentPage, sortBy);
+    window.history.pushState({}, '', url);
+    fetchResults(query, filters, currentPage, sortBy);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -239,9 +331,11 @@ export default function SearchResultsClientRefactored({
     }
   };
 
-  const handleExtractAll = () => {
-    if (!results) return;
-    
+  const handleExtractAll = async () => {
+    if (!results || results.length === 0) return;
+
+    trackExtractionUsage(); // Track usage
+
     // Process all visible results
     results.forEach(result => {
       const state = getExtractionState(result.id);
@@ -265,6 +359,18 @@ export default function SearchResultsClientRefactored({
 
   const totalPages = Math.ceil(totalResults / 10);
 
+  // Handle extraction mode change for non-authenticated users
+  const handleExtractionModeChange = (mode: ExtractionMode) => {
+    if (!isAuthenticated && mode === 'fulltext') {
+      // Show sign-up prompt for full text mode
+      if (confirm('Full text extraction is available for registered users. Would you like to sign up for free?')) {
+        window.location.href = '/auth/signup?message=fulltext_feature&redirect=' + encodeURIComponent(window.location.href);
+      }
+      return;
+    }
+    setExtractionMode(mode);
+  };
+
   return (
     <main className="min-h-screen w-full bg-white text-gray-900 font-sans flex flex-col">
       <Header />
@@ -276,6 +382,37 @@ export default function SearchResultsClientRefactored({
         onQueryChange={setQuery}
         onSearch={handleSearch}
       />
+
+      {/* Subtle usage indicator for anonymous users */}
+      {!isAuthenticated && (usageData.searches > 0 || usageData.extractions > 0) && (
+        <div className={`px-6 py-2 border-b ${
+          usageData.searches >= 40 || usageData.extractions >= 16 
+            ? 'bg-amber-50 border-amber-100' 
+            : 'bg-gray-50 border-gray-100'
+        }`}>
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-4">
+              <span className={usageData.searches >= 40 ? 'text-amber-700 font-medium' : 'text-gray-600'}>
+                Free usage today: {usageData.searches}/50 searches
+              </span>
+              {usageData.extractions > 0 && (
+                <span className={usageData.extractions >= 16 ? 'text-amber-700 font-medium' : 'text-gray-600'}>
+                  {usageData.extractions}/20 extractions
+                </span>
+              )}
+            </div>
+            <a href="/auth/signup" className={`hover:underline ${
+              usageData.searches >= 40 || usageData.extractions >= 16 
+                ? 'text-amber-700 font-medium' 
+                : 'text-blue-600'
+            }`}>
+              {usageData.searches >= 40 || usageData.extractions >= 16 
+                ? 'Sign up now to continue →' 
+                : 'Sign up for unlimited access →'}
+            </a>
+          </div>
+        </div>
+      )}
 
       <section className="w-full flex-1 flex overflow-hidden">
         <FilterSidebar
@@ -383,7 +520,7 @@ export default function SearchResultsClientRefactored({
                   <InlineExtractionControls
                     // Extraction props
                     extractionMode={extractionMode}
-                    onModeChange={setExtractionMode}
+                    onModeChange={handleExtractionModeChange}
                     selectedProvider={aiProvider}
                     selectedModel={aiModel}
                     onProviderChange={(provider: string, model: string) => {
@@ -424,6 +561,8 @@ export default function SearchResultsClientRefactored({
                     totalResults={totalResults}
                     sortBy={sortBy}
                     onSortChange={handleSortChange}
+                    // Auth
+                    isAuthenticated={isAuthenticated}
                   />
                 )}
                 

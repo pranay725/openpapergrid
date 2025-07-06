@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/lib/auth-context'
 import { Logo } from '@/components/Logo'
+import { AlertCircle } from 'lucide-react'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
@@ -18,6 +19,20 @@ export default function SignUpPage() {
   const [message, setMessage] = useState<string | null>(null)
   const { signUp, signInWithOAuth } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // Check for rate limit message
+  useEffect(() => {
+    const messageParam = searchParams.get('message')
+    const redirectParam = searchParams.get('redirect')
+    
+    if (messageParam === 'rate_limit_exceeded') {
+      // Store redirect URL for after signup
+      if (redirectParam) {
+        sessionStorage.setItem('redirectAfterAuth', redirectParam)
+      }
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,6 +68,9 @@ export default function SignUpPage() {
     }
   }
 
+  const isRateLimited = searchParams.get('message') === 'rate_limit_exceeded'
+  const isFullTextFeature = searchParams.get('message') === 'fulltext_feature'
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -76,6 +94,38 @@ export default function SignUpPage() {
             <CardTitle className="text-center">Sign Up</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {isRateLimited && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-amber-900">
+                      Free usage limit reached
+                    </h3>
+                    <p className="text-sm text-amber-700 mt-1">
+                      Sign up for unlimited searches and AI-powered extractions. We'll redirect you back to your search after signup.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {isFullTextFeature && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-blue-900">
+                      Unlock Full Text Extraction
+                    </h3>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Sign up to access full text extraction from PDFs and research papers. Extract detailed information beyond abstracts!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded p-3 text-red-700 text-sm">

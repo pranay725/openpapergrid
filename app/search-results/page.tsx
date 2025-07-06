@@ -1,5 +1,4 @@
 import { Suspense } from 'react'
-import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { getScreeningConfigurations, getActiveConfiguration } from '@/lib/screening-config-api'
 import SearchResultsClientRefactored from './SearchResultsClientRefactored'
@@ -7,25 +6,22 @@ import SearchResultsClientRefactored from './SearchResultsClientRefactored'
 export default async function SearchResultsPageWrapper() {
   const supabase = await createSupabaseServerClient()
   
-  // Check authentication
+  // Check authentication but don't require it
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    redirect('/auth/login')
-  }
 
   try {
-    // Fetch configurations and active config in parallel
-    const [configurations, activeConfig] = await Promise.all([
-      getScreeningConfigurations(),
-      getActiveConfiguration(user.id)
-    ])
+    // Fetch configurations
+    const configurations = await getScreeningConfigurations()
+    
+    // Only fetch active config if user is authenticated
+    const activeConfig = user ? await getActiveConfiguration(user.id) : null
 
     return (
       <Suspense fallback={<div>Loading...</div>}>
         <SearchResultsClientRefactored 
           configurations={configurations}
           activeConfig={activeConfig}
-          userId={user.id}
+          userId={user?.id || ''}
         />
       </Suspense>
     )
@@ -36,7 +32,7 @@ export default async function SearchResultsPageWrapper() {
       <SearchResultsClientRefactored 
         configurations={[]}
         activeConfig={null}
-        userId={user.id}
+        userId={user?.id || ''}
       />
     )
   }
