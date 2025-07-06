@@ -45,6 +45,16 @@ const AI_PROVIDERS = {
 
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication - but allow anonymous users with rate limiting
+    const supabase = createSupabaseServerClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+
+    // Log the request for monitoring (anonymous users tracked by IP in middleware)
+    if (userId) {
+      await trackUsage(userId, 'api_calls');
+    }
+
     const body = await request.json();
     const { workId, messages = [], fullText, provider = 'openrouter', model } = body;
 
