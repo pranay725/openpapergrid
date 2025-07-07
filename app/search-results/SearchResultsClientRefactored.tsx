@@ -361,12 +361,12 @@ export default function SearchResultsClientRefactored({
 
       {/* Subtle usage indicator for anonymous users */}
       {!isAuthenticated && (usageData.searches > 0 || usageData.extractions > 0) && (
-        <div className={`px-6 py-2 border-b ${
+        <div className={`border-b ${
           usageData.searches >= 40 || usageData.extractions >= 16 
             ? 'bg-amber-50 border-amber-100' 
             : 'bg-gray-50 border-gray-100'
         }`}>
-          <div className="flex items-center justify-between text-xs">
+          <div className="px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between text-xs">
             <div className="flex items-center gap-4">
               <span className={usageData.searches >= 40 ? 'text-amber-700 font-medium' : 'text-gray-600'}>
                 Free usage today: {usageData.searches}/50 searches
@@ -475,7 +475,7 @@ export default function SearchResultsClientRefactored({
         />
 
         <div className="flex-1 overflow-y-auto">
-          <div className="p-6">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
             {error && (
               <div className="flex items-center justify-center h-64 text-red-600">
                 <p>Error: {error}</p>
@@ -585,22 +585,9 @@ export default function SearchResultsClientRefactored({
 
       {/* Footer */}
       <footer className="bg-gray-50 border-t border-gray-300 flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Logo />
-              <span className="text-sm text-gray-600">OpenPaper Grid</span>
-            </div>
-            <div className="flex items-center gap-6 text-sm">
-              <a href="#" className="text-blue-600 hover:underline">Documentation</a>
-              <a href="#" className="text-blue-600 hover:underline">GitHub</a>
-              <a href="#" className="text-blue-600 hover:underline">Discord</a>
-              <a href="#" className="text-blue-600 hover:underline">API</a>
-            </div>
-          </div>
-          <div className="mt-6 pt-6 border-t border-gray-200 text-xs text-gray-500 text-center">
-            <p>© 2025 OpenPaper Grid. Open source under MIT License.</p>
-            <p className="mt-1">Built with Next.js, Supabase, n8n, and OpenAlex</p>
+        <div className="px-4 sm:px-6 lg:px-8 py-6">
+          <div className="text-center text-sm text-gray-600">
+            OpenPaper Grid © 2025 • Contact <a href="mailto:madan@decibio.com" className="text-blue-600 hover:underline">madan@decibio.com</a>
           </div>
         </div>
       </footer>

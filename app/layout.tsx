@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OpenPaper Grid",
-  description: "AI-Powered Biomedical Literature Platform",
+  title: "OpenPaper Grid – PubMed Boolean Search + AI Extraction",
+  description: "Paste your PubMed query. Get papers, AI summaries, and structured data you can trust—all in one click. Export to CSV/JSON. No vendor lock-in.",
 };
 
 export default function RootLayout({
