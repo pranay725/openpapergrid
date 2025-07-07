@@ -18,13 +18,11 @@ import { buildFilterUrl } from './utils/filterHelpers';
 import { SearchResult, ExtractionMetrics, SearchFilters, SearchResultsClientProps } from './types';
 import { CustomField, ScreeningConfiguration } from '@/lib/database.types';
 import { 
-  setActiveConfiguration, 
-  updateConfiguration
+  setActiveConfiguration
 } from '@/lib/screening-config-api';
 import { FullTextViewer } from './components/FullTextViewer';
 import { InlineExtractionControls, ExtractionMode } from './components/InlineExtractionControls';
 import { ConfigurationDialog } from './components/ConfigurationManagement/ConfigurationDialog';
-import { UsageLimitIndicator } from './components/UsageLimitIndicator';
 
 export default function SearchResultsClientRefactored({ 
   configurations, 
@@ -110,7 +108,6 @@ export default function SearchResultsClientRefactored({
   const [customFields, setCustomFields] = useState<CustomField[]>((activeConfig || basicScreeningConfig)?.fields || []);
   const [selectedConfig, setSelectedConfig] = useState<string>((activeConfig || basicScreeningConfig)?.id || '');
   const [showAddFieldDialog, setShowAddFieldDialog] = useState(false);
-  const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [showConfigDialog, setShowConfigDialog] = useState(false);
   const [editingField, setEditingField] = useState<CustomField | null>(null);
   const [aiProvider, setAIProvider] = useState('openrouter');
@@ -123,7 +120,7 @@ export default function SearchResultsClientRefactored({
   const prevExtractionModeRef = useRef(extractionMode);
 
   // Custom hooks
-  const { filters, pendingFilters, counts, actions } = useSearchFilters({
+  const { filters, pendingFilters, actions } = useSearchFilters({
     year: searchParams.get('year')?.split('|') || [],
     countries: searchParams.get('countries')?.split('|') || [],
     authors: searchParams.get('authors')?.split('|') || [],
@@ -149,7 +146,6 @@ export default function SearchResultsClientRefactored({
 
   const { 
     aiResponses, 
-    fieldValues, 
     updateFieldValue, 
     updateAIResponse,
     clearResultResponses 
@@ -183,7 +179,7 @@ export default function SearchResultsClientRefactored({
           confidence: 0.5, // Show lower confidence while streaming
           citations: [] // Always provide empty array during streaming
         });
-      } catch (e) {
+      } catch {
         // If not valid JSON, just update with the string
         updateAIResponse(workId, fieldId, {
           value: partial,
@@ -268,11 +264,6 @@ export default function SearchResultsClientRefactored({
 
     trackSearchUsage(); // Track usage
     
-    const params = new URLSearchParams({
-      query: query,
-      page: currentPage.toString(),
-      sort: sortBy
-    });
     const url = buildFilterUrl(query, filters, currentPage, sortBy);
     window.history.pushState({}, '', url);
     fetchResults(query, filters, currentPage, sortBy);
@@ -312,23 +303,8 @@ export default function SearchResultsClientRefactored({
     }
   };
 
-  const handleAddColumn = () => {
-    setShowConfigDialog(true);
-  };
-
   const handleAddField = (field: CustomField) => {
     setCustomFields([...customFields, field]);
-  };
-
-  const handleSaveConfig = async () => {
-    if (!currentConfig || currentConfig.visibility !== 'private') return;
-    
-    try {
-      await updateConfiguration(currentConfig.id, { fields: customFields });
-      alert('Configuration saved successfully!');
-    } catch {
-      alert('Failed to save configuration');
-    }
   };
 
   const handleExtractAll = async () => {
@@ -459,7 +435,7 @@ export default function SearchResultsClientRefactored({
             };
             const key = filterMap[filterType];
             if (key) {
-              actions.updatePendingFilter(key, values as any);
+              actions.updatePendingFilter(key, values as SearchFilters[typeof key]);
             }
           }}
           onApplyFilters={() => {
@@ -553,7 +529,7 @@ export default function SearchResultsClientRefactored({
                         await deleteConfiguration(configId);
                         // Refresh configurations
                         window.location.reload();
-                      } catch (error) {
+                      } catch {
                         alert('Failed to delete configuration');
                       }
                     }}
@@ -690,10 +666,6 @@ export default function SearchResultsClientRefactored({
           fullText={getFullTextData(viewingFullText.id)?.fullText}
           sections={getFullTextData(viewingFullText.id)?.sections}
           extractionPrompts={getExtractionPrompts(viewingFullText.id)}
-          extractionState={getExtractionState(viewingFullText.id)}
-          provider={aiProvider}
-          model={aiModel}
-          onFetchFullText={() => processWork(viewingFullText, [])}
           metrics={getExtractionMetrics(viewingFullText.id)}
           onClose={() => setViewingFullText(null)}
         />

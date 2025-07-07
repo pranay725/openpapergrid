@@ -54,7 +54,6 @@ const AI_PROVIDERS = {
 export const CompactExtractionControls: React.FC<CompactExtractionControlsProps> = ({
   extractionMode,
   onModeChange,
-  selectedProvider,
   selectedModel,
   onProviderChange,
   isExtracting,
@@ -77,7 +76,6 @@ export const CompactExtractionControls: React.FC<CompactExtractionControlsProps>
 
   const userConfigs = configurations.filter(c => c.visibility === 'private' && c.user_id === userId);
   const defaultConfigs = configurations.filter(c => c.visibility === 'default');
-  const communityConfigs = configurations.filter(c => c.visibility === 'community');
 
   const activeFieldCount = customFields.filter(f => f.enabled).length;
   

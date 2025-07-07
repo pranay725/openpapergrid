@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, FileText, Brain, CheckCircle, AlertCircle, Loader2, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CustomField } from '@/lib/database.types';
-import { ExtractionMetrics } from '../types';
+import { ExtractionMetrics, SearchResult } from '../types';
 
 interface FullTextViewerProps {
   result: SearchResult;
