@@ -318,9 +318,9 @@ export async function POST(request: NextRequest) {
     // Check authentication
     const { createSupabaseServerClient } = await import('@/lib/supabase-server');
     const supabase = await createSupabaseServerClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
-    if (!session) {
+    if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required for full text extraction' },
         { status: 401 }

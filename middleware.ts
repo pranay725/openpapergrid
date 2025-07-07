@@ -32,7 +32,7 @@ export async function middleware(request: NextRequest) {
   
   // For security-critical operations, verify the user
   let verifiedUser = null;
-  if (session && (path.startsWith('/api/fulltext') || path.startsWith('/api/ai/confidence'))) {
+  if (session && (path.startsWith('/api/fulltext') || path.startsWith('/api/ai/confidence') || path.startsWith('/api/ai/extract'))) {
     const { data: { user } } = await supabase.auth.getUser();
     verifiedUser = user;
   }

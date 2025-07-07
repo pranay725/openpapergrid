@@ -121,13 +121,18 @@ export async function POST(request: NextRequest) {
     // Check authentication
     const { createSupabaseServerClient } = await import('@/lib/supabase-server');
     const supabase = await createSupabaseServerClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     
     // Track usage
-    if (session?.user?.id) {
-      const { trackUsage } = await import('@/lib/rate-limiter');
-      await trackUsage(session.user.id, 'abstract_extractions');
-    }
+    const { trackUsage } = await import('@/lib/rate-limiter');
+    await trackUsage(user.id, 'abstract_extractions');
     
     const body = await request.json();
     const { 
